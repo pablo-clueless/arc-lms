@@ -1,0 +1,12 @@
+-- Drop period_swap_requests table
+DROP INDEX IF EXISTS idx_period_swap_requests_tenant_id_target_tutor_id;
+DROP INDEX IF EXISTS idx_period_swap_requests_tenant_id_requesting_tutor_id;
+DROP INDEX IF EXISTS idx_period_swap_requests_tenant_id_status;
+DROP INDEX IF EXISTS idx_period_swap_requests_status;
+DROP INDEX IF EXISTS idx_period_swap_requests_target_tutor_id;
+DROP INDEX IF EXISTS idx_period_swap_requests_requesting_tutor_id;
+DROP INDEX IF EXISTS idx_period_swap_requests_target_period_id;
+DROP INDEX IF EXISTS idx_period_swap_requests_requesting_period_id;
+DROP INDEX IF EXISTS idx_period_swap_requests_tenant_id_id;
+DROP INDEX IF EXISTS idx_period_swap_requests_tenant_id;
+DROP TABLE IF EXISTS period_swap_requests CASCADE;

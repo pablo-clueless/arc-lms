@@ -1,0 +1,2103 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Arc LMS API",
+    "description": "Multi-tenant Learning Management System API for Nigerian primary and secondary schools. Provides comprehensive academic management including sessions, terms, classes, courses, assessments, examinations, timetabling, meetings, communications, billing, and audit trails.\n\n## Features\n- Multi-tenant architecture with complete data isolation\n- Role-based access control (SUPER_ADMIN, ADMIN, TUTOR, STUDENT)\n- Automatic timetable generation with conflict resolution\n- Nigerian academic calendar support (3 terms per session)\n- Postpaid billing model (NGN 500 per student per term)\n- Real-time notifications and communications\n- Comprehensive audit logging\n- Examination integrity tracking\n- Progress tracking and report card generation\n\n## Authentication\nAll endpoints (except public auth routes) require Bearer JWT authentication via the `Authorization` header:\n```\nAuthorization: Bearer <access_token>\n```\n\n## Rate Limiting\n- Default: 1,000 requests/minute per tenant\n- SUPER_ADMIN: 2,000 requests/minute\n- Burst: 2x sustained rate for 30 seconds\n\n## Idempotency\nAll mutating operations (POST, PUT, PATCH) support the `Idempotency-Key` header to prevent duplicate operations.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Arc LMS Support",
+      "email": "support@arc-lms.com",
+      "url": "https://arc-lms.com"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080/api/v1",
+      "description": "Development server"
+    },
+    {
+      "url": "https://arc-lms.onrender.com/api/v1",
+      "description": "Production server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Health check and system status"
+    },
+    {
+      "name": "Authentication",
+      "description": "User authentication and authorization"
+    },
+    {
+      "name": "Tenants",
+      "description": "Tenant (school) management - SUPER_ADMIN only"
+    },
+    {
+      "name": "Users",
+      "description": "User management and profiles"
+    },
+    {
+      "name": "Sessions",
+      "description": "Academic session (school year) management"
+    },
+    {
+      "name": "Terms",
+      "description": "Term management within sessions"
+    },
+    {
+      "name": "Classes",
+      "description": "Class (student cohort) management"
+    },
+    {
+      "name": "Courses",
+      "description": "Course (subject) management and tutor assignments"
+    },
+    {
+      "name": "Timetables",
+      "description": "Automatic timetable generation and period management"
+    },
+    {
+      "name": "Assessments",
+      "description": "Quizzes and assignments"
+    },
+    {
+      "name": "Examinations",
+      "description": "Formal end-of-term examinations"
+    },
+    {
+      "name": "Progress",
+      "description": "Student progress tracking and report cards"
+    },
+    {
+      "name": "Meetings",
+      "description": "Virtual class meetings and scheduling"
+    },
+    {
+      "name": "Communications",
+      "description": "Email communications and broadcasts"
+    },
+    {
+      "name": "Notifications",
+      "description": "In-app and push notifications"
+    },
+    {
+      "name": "Billing",
+      "description": "Subscription and invoice management"
+    },
+    {
+      "name": "Audit",
+      "description": "Audit log access and compliance"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Health check",
+        "description": "Returns the API health status. No authentication required.",
+        "operationId": "healthCheck",
+        "responses": {
+          "200": {
+            "description": "API is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "healthy"
+                    },
+                    "service": {
+                      "type": "string",
+                      "example": "arc-lms-api"
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "1.0.0"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/public/auth/login": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "User login",
+        "description": "Authenticates a user and returns JWT access and refresh tokens.",
+        "operationId": "login",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "user@school.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "minLength": 8,
+                    "example": "SecurePassword123!"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access_token": {
+                      "type": "string",
+                      "description": "JWT access token (expires in 15 minutes)"
+                    },
+                    "refresh_token": {
+                      "type": "string",
+                      "description": "JWT refresh token (expires in 30 days)"
+                    },
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/public/auth/register": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "User registration",
+        "description": "Registers a new user account (for invitation acceptance or initial setup).",
+        "operationId": "register",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password", "first_name", "last_name", "invitation_token"],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "minLength": 8
+                  },
+                  "first_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "last_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "middle_name": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "invitation_token": {
+                    "type": "string",
+                    "description": "Token from invitation email"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Registration successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/public/auth/password-reset": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Request password reset",
+        "description": "Sends a password reset email to the user. Reset link expires in 30 minutes.",
+        "operationId": "passwordReset",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email"],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password reset email sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Password reset email sent successfully"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/tenants": {
+      "get": {
+        "tags": ["Tenants"],
+        "summary": "List all tenants",
+        "description": "Returns a paginated list of all tenants. SUPER_ADMIN only.",
+        "operationId": "listTenants",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"$ref": "#/components/parameters/Page"},
+          {"$ref": "#/components/parameters/Limit"},
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Filter by tenant status",
+            "schema": {
+              "type": "string",
+              "enum": ["ACTIVE", "SUSPENDED"]
+            }
+          },
+          {
+            "name": "school_type",
+            "in": "query",
+            "description": "Filter by school type",
+            "schema": {
+              "type": "string",
+              "enum": ["PRIMARY", "SECONDARY", "COMBINED"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of tenants",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {"$ref": "#/components/schemas/PaginatedResponse"},
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Tenant"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Tenants"],
+        "summary": "Create a new tenant",
+        "description": "Onboards a new school tenant with a principal ADMIN user. SUPER_ADMIN only. Supports idempotency.",
+        "operationId": "createTenant",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTenantRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tenant created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tenant"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/tenants/{id}": {
+      "get": {
+        "tags": ["Tenants"],
+        "summary": "Get tenant by ID",
+        "description": "Returns details of a specific tenant. SUPER_ADMIN only.",
+        "operationId": "getTenant",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Tenant UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tenant"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Tenants"],
+        "summary": "Update tenant",
+        "description": "Updates tenant configuration and details. SUPER_ADMIN only. Supports idempotency.",
+        "operationId": "updateTenant",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Tenant UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tenant updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tenant"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Tenants"],
+        "summary": "Delete tenant",
+        "description": "Permanently deletes a tenant and all associated data. SUPER_ADMIN only. Use with extreme caution.",
+        "operationId": "deleteTenant",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Tenant UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Tenant deleted successfully"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/tenants/{id}/suspend": {
+      "post": {
+        "tags": ["Tenants"],
+        "summary": "Suspend tenant",
+        "description": "Suspends a tenant for non-payment or policy violations. All API access is revoked. SUPER_ADMIN only. Supports idempotency.",
+        "operationId": "suspendTenant",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Tenant UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["reason"],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500,
+                    "description": "Reason for suspension"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tenant suspended successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tenant"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/tenants/{id}/reactivate": {
+      "post": {
+        "tags": ["Tenants"],
+        "summary": "Reactivate tenant",
+        "description": "Reactivates a suspended tenant, restoring API access. SUPER_ADMIN only. Supports idempotency.",
+        "operationId": "reactivateTenant",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Tenant UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant reactivated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tenant"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/users/me": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Get current user profile",
+        "description": "Returns the authenticated user's profile information.",
+        "operationId": "getCurrentUser",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Current user profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Users"],
+        "summary": "Update current user profile",
+        "description": "Updates the authenticated user's profile. Supports idempotency.",
+        "operationId": "updateCurrentUser",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserProfileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "List users",
+        "description": "Returns a paginated list of users within the tenant. ADMIN can see all tenant users.",
+        "operationId": "listUsers",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"$ref": "#/components/parameters/Page"},
+          {"$ref": "#/components/parameters/Limit"},
+          {
+            "name": "role",
+            "in": "query",
+            "description": "Filter by user role",
+            "schema": {
+              "type": "string",
+              "enum": ["ADMIN", "TUTOR", "STUDENT"]
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Filter by user status",
+            "schema": {
+              "type": "string",
+              "enum": ["ACTIVE", "INACTIVE", "DEACTIVATED", "PENDING"]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Search by name or email",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of users",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {"$ref": "#/components/schemas/PaginatedResponse"},
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/User"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/users/invite": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Invite a user",
+        "description": "Sends an invitation email to a new user (TUTOR or STUDENT). ADMIN only. Supports idempotency.",
+        "operationId": "inviteUser",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User invited successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Invitation sent successfully"
+                    },
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Get user by ID",
+        "description": "Returns details of a specific user within the tenant.",
+        "operationId": "getUser",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "User UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Users"],
+        "summary": "Update user",
+        "description": "Updates user details. ADMIN can update any tenant user. Supports idempotency.",
+        "operationId": "updateUser",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "User UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/users/{id}/deactivate": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Deactivate user",
+        "description": "Deactivates a user, revoking API access. ADMIN only. Supports idempotency.",
+        "operationId": "deactivateUser",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "User UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["reason"],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User deactivated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/sessions": {
+      "get": {
+        "tags": ["Sessions"],
+        "summary": "List sessions",
+        "description": "Returns a paginated list of academic sessions for the tenant.",
+        "operationId": "listSessions",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"$ref": "#/components/parameters/Page"},
+          {"$ref": "#/components/parameters/Limit"},
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Filter by session status",
+            "schema": {
+              "type": "string",
+              "enum": ["ACTIVE", "ARCHIVED", "DRAFT"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {"$ref": "#/components/schemas/PaginatedResponse"},
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Session"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Sessions"],
+        "summary": "Create a session",
+        "description": "Creates a new academic session (school year). Only one session can be active at a time. ADMIN only. Supports idempotency.",
+        "operationId": "createSession",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Session created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/sessions/{id}": {
+      "get": {
+        "tags": ["Sessions"],
+        "summary": "Get session by ID",
+        "description": "Returns details of a specific session.",
+        "operationId": "getSession",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Session UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Sessions"],
+        "summary": "Update session",
+        "description": "Updates session details. ADMIN only. Supports idempotency.",
+        "operationId": "updateSession",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Session UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Sessions"],
+        "summary": "Delete session",
+        "description": "Deletes a session and all associated data. ADMIN only. Use with caution.",
+        "operationId": "deleteSession",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Session UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Session deleted successfully"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/sessions/{id}/activate": {
+      "post": {
+        "tags": ["Sessions"],
+        "summary": "Activate session",
+        "description": "Marks a session as active. Only one session can be active at a time. ADMIN only. Supports idempotency.",
+        "operationId": "activateSession",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Session UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Session activated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT access token obtained from /public/auth/login"
+      }
+    },
+    "parameters": {
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "description": "Unique key to ensure idempotent requests. Prevents duplicate operations.",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "Page": {
+        "name": "page",
+        "in": "query",
+        "description": "Page number (1-indexed)",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "description": "Number of items per page",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid request parameters",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "BAD_REQUEST",
+                "message": "Invalid request parameters",
+                "details": {}
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Authentication required or token invalid/expired",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "UNAUTHORIZED",
+                "message": "Authentication required",
+                "details": {}
+              }
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Insufficient permissions",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "FORBIDDEN",
+                "message": "Insufficient permissions to perform this action",
+                "details": {}
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "NOT_FOUND",
+                "message": "Resource not found",
+                "details": {}
+              }
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Resource conflict (e.g., duplicate email, overlapping dates)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "CONFLICT",
+                "message": "A resource with this identifier already exists",
+                "details": {}
+              }
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "Request validation failed",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "VALIDATION_ERROR",
+                "message": "Request validation failed",
+                "details": {
+                  "fields": {
+                    "email": "must be a valid email address",
+                    "password": "must be at least 8 characters"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "RateLimitExceeded": {
+        "description": "Rate limit exceeded",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "RATE_LIMIT_EXCEEDED",
+                "message": "Rate limit exceeded. Please try again later.",
+                "details": {
+                  "retry_after": 60
+                }
+              }
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "Internal server error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "INTERNAL_ERROR",
+                "message": "An unexpected error occurred",
+                "details": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Machine-readable error code"
+              },
+              "message": {
+                "type": "string",
+                "description": "Human-readable error message"
+              },
+              "details": {
+                "type": "object",
+                "description": "Additional error context",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      },
+      "PaginatedResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "description": "Array of result items"
+          },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "page": {
+                "type": "integer",
+                "description": "Current page number"
+              },
+              "limit": {
+                "type": "integer",
+                "description": "Items per page"
+              },
+              "total": {
+                "type": "integer",
+                "description": "Total number of items"
+              },
+              "total_pages": {
+                "type": "integer",
+                "description": "Total number of pages"
+              }
+            }
+          }
+        }
+      },
+      "Tenant": {
+        "type": "object",
+        "required": ["id", "name", "school_type", "contact_email", "address", "status", "configuration", "billing_contact", "principal_admin_id", "created_at", "updated_at"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200,
+            "example": "St. Mary's Secondary School"
+          },
+          "school_type": {
+            "type": "string",
+            "enum": ["PRIMARY", "SECONDARY", "COMBINED"]
+          },
+          "contact_email": {
+            "type": "string",
+            "format": "email"
+          },
+          "address": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "logo": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ACTIVE", "SUSPENDED"]
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/TenantConfiguration"
+          },
+          "billing_contact": {
+            "$ref": "#/components/schemas/BillingContact"
+          },
+          "suspension_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "principal_admin_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "suspended_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "TenantConfiguration": {
+        "type": "object",
+        "required": ["timezone", "school_level", "period_duration", "daily_period_limit", "grade_weighting", "attendance_threshold", "invoice_grace_period", "suspension_threshold"],
+        "properties": {
+          "timezone": {
+            "type": "string",
+            "default": "Africa/Lagos",
+            "example": "Africa/Lagos"
+          },
+          "school_level": {
+            "type": "string",
+            "enum": ["PRIMARY", "SECONDARY", "COMBINED"]
+          },
+          "period_duration": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 90,
+            "description": "Duration of each period in minutes"
+          },
+          "daily_period_limit": {
+            "type": "integer",
+            "minimum": 4,
+            "maximum": 12,
+            "description": "Maximum periods per day"
+          },
+          "max_periods_per_week": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Maximum periods per week per course"
+          },
+          "grade_weighting": {
+            "type": "object",
+            "properties": {
+              "continuous_assessment": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "examination": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "example": {
+              "continuous_assessment": 40,
+              "examination": 60
+            }
+          },
+          "attendance_threshold": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Minimum attendance percentage"
+          },
+          "invoice_grace_period": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60,
+            "description": "Grace period for invoice payment in days"
+          },
+          "suspension_threshold": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 90,
+            "description": "Days after which non-payment triggers suspension"
+          },
+          "branding_assets": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "communication_prefs": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "boolean"
+            }
+          },
+          "supported_classes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": ["JSS1", "JSS2", "JSS3", "SS1", "SS2", "SS3"]
+          },
+          "notification_settings": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "boolean"
+            }
+          },
+          "meeting_recording_retention": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365,
+            "description": "Meeting recording retention in days"
+          }
+        }
+      },
+      "BillingContact": {
+        "type": "object",
+        "required": ["name", "email", "phone"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 100
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "phone": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 20
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "required": ["id", "role", "email", "first_name", "last_name", "status", "created_at", "updated_at"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenant_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "NULL for SUPER_ADMIN"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["SUPER_ADMIN", "ADMIN", "TUTOR", "STUDENT"]
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "first_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "last_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "middle_name": {
+            "type": "string",
+            "maxLength": 100,
+            "nullable": true
+          },
+          "profile_photo": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ACTIVE", "INACTIVE", "DEACTIVATED", "PENDING"]
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Array of resource:action permissions (e.g., 'tenant:create', 'user:delete')"
+          },
+          "notification_preferences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationPreference"
+            }
+          },
+          "last_login_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "deactivated_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "deactivation_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "NotificationPreference": {
+        "type": "object",
+        "required": ["event_type", "in_app_enabled", "push_enabled", "email_enabled"],
+        "properties": {
+          "event_type": {
+            "type": "string"
+          },
+          "in_app_enabled": {
+            "type": "boolean"
+          },
+          "push_enabled": {
+            "type": "boolean"
+          },
+          "email_enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Session": {
+        "type": "object",
+        "required": ["id", "tenant_id", "label", "start_year", "end_year", "status", "created_at", "updated_at"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenant_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 7,
+            "maxLength": 20,
+            "example": "2025/2026"
+          },
+          "start_year": {
+            "type": "integer",
+            "minimum": 2000,
+            "maximum": 2100
+          },
+          "end_year": {
+            "type": "integer",
+            "minimum": 2000,
+            "maximum": 2100
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ACTIVE", "ARCHIVED", "DRAFT"]
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "archived_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "CreateTenantRequest": {
+        "type": "object",
+        "required": ["name", "school_type", "contact_email", "address", "billing_contact", "principal_admin"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          },
+          "school_type": {
+            "type": "string",
+            "enum": ["PRIMARY", "SECONDARY", "COMBINED"]
+          },
+          "contact_email": {
+            "type": "string",
+            "format": "email"
+          },
+          "address": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "logo": {
+            "type": "string",
+            "format": "uri"
+          },
+          "billing_contact": {
+            "$ref": "#/components/schemas/BillingContact"
+          },
+          "principal_admin": {
+            "type": "object",
+            "required": ["email", "first_name", "last_name"],
+            "properties": {
+              "email": {
+                "type": "string",
+                "format": "email"
+              },
+              "first_name": {
+                "type": "string"
+              },
+              "last_name": {
+                "type": "string"
+              },
+              "phone": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "UpdateTenantRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          },
+          "contact_email": {
+            "type": "string",
+            "format": "email"
+          },
+          "address": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "logo": {
+            "type": "string",
+            "format": "uri"
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/TenantConfiguration"
+          },
+          "billing_contact": {
+            "$ref": "#/components/schemas/BillingContact"
+          }
+        }
+      },
+      "InviteUserRequest": {
+        "type": "object",
+        "required": ["email", "role", "first_name", "last_name"],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["TUTOR", "STUDENT"]
+          },
+          "first_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "last_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "middle_name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "phone": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateUserProfileRequest": {
+        "type": "object",
+        "properties": {
+          "first_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "last_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "middle_name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "phone": {
+            "type": "string"
+          },
+          "profile_photo": {
+            "type": "string",
+            "format": "uri"
+          },
+          "notification_preferences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationPreference"
+            }
+          }
+        }
+      },
+      "UpdateUserRequest": {
+        "type": "object",
+        "properties": {
+          "first_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "last_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "middle_name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "phone": {
+            "type": "string"
+          },
+          "profile_photo": {
+            "type": "string",
+            "format": "uri"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ACTIVE", "INACTIVE"]
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CreateSessionRequest": {
+        "type": "object",
+        "required": ["label", "start_year", "end_year"],
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 7,
+            "maxLength": 20,
+            "example": "2025/2026"
+          },
+          "start_year": {
+            "type": "integer",
+            "minimum": 2000,
+            "maximum": 2100
+          },
+          "end_year": {
+            "type": "integer",
+            "minimum": 2000,
+            "maximum": 2100
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ACTIVE", "DRAFT"],
+            "default": "DRAFT"
+          }
+        }
+      },
+      "UpdateSessionRequest": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 7,
+            "maxLength": 20
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ACTIVE", "ARCHIVED", "DRAFT"]
+          }
+        }
+      }
+    }
+  }
+}
