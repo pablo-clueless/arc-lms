@@ -33,7 +33,7 @@ SUPERADMIN_LAST_NAME=Name
 1. **On Startup**: When the application starts, it runs the seed script after establishing the database connection.
 
 2. **Idempotent**: The seed script checks if a user with the specified email already exists:
-   - ✅ **If user exists**: Skips seeding (logs: "SuperAdmin already exists")
+   - ✅ **If user exists**: Skips seeding (logs: "👨‍💼 SuperAdmin already exists")
    - ✅ **If user doesn't exist**: Creates the superadmin user
 
 3. **Non-Blocking**: If seeding fails, the application will log a warning but continue to start normally. This prevents deployment issues.
@@ -42,21 +42,21 @@ SUPERADMIN_LAST_NAME=Name
 
 When the superadmin is created:
 ```
-✓ Database connection established
+✅ Database connection established
 🌱 Running database seeds...
-✓ SuperAdmin created successfully: smsnmicheal@gmail.com
+✅ SuperAdmin created successfully: smsnmicheal@gmail.com
   - Role: SUPER_ADMIN
   - Status: ACTIVE
   - Permissions: Full system access
-✓ Database seeding completed
+✅ Database seeding completed
 ```
 
 When the superadmin already exists:
 ```
-✓ Database connection established
+🌐 Database connection established
 🌱 Running database seeds...
-✓ SuperAdmin already exists: smsnmicheal@gmail.com (skipping seed)
-✓ Database seeding completed
+👨‍💼 SuperAdmin already exists: smsnmicheal@gmail.com (skipping seed)
+✅ Database seeding completed
 ```
 
 ## Security Considerations
@@ -114,7 +114,7 @@ func SeedAll(db *sql.DB) error {
 	//     return fmt.Errorf("failed to seed default tenant: %w", err)
 	// }
 
-	log.Println("✓ Database seeding completed")
+	log.Println("✅ Database seeding completed")
 	return nil
 }
 ```

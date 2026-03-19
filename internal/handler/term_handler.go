@@ -41,7 +41,7 @@ func (h *TermHandler) CreateTerm(c *gin.Context) {
 	var req service.CreateTermRequest
 
 	// Parse session ID from path
-	sessionIDParam := c.Param("session_id")
+	sessionIDParam := c.Param("id")
 	sessionID, err := uuid.Parse(sessionIDParam)
 	if err != nil {
 		errors.BadRequest(c, "invalid session ID format", map[string]interface{}{"error": err.Error()})
@@ -86,7 +86,7 @@ func (h *TermHandler) CreateTerm(c *gin.Context) {
 // @Router /sessions/{session_id}/terms [get]
 func (h *TermHandler) ListTerms(c *gin.Context) {
 	// Parse session ID from path
-	sessionIDParam := c.Param("session_id")
+	sessionIDParam := c.Param("id")
 	sessionID, err := uuid.Parse(sessionIDParam)
 	if err != nil {
 		errors.BadRequest(c, "invalid session ID format", map[string]interface{}{"error": err.Error()})
@@ -130,7 +130,7 @@ func (h *TermHandler) ListTerms(c *gin.Context) {
 // @Router /sessions/{session_id}/terms/{id} [get]
 func (h *TermHandler) GetTerm(c *gin.Context) {
 	// Parse term ID from path
-	idParam := c.Param("id")
+	idParam := c.Param("term_id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
 		errors.BadRequest(c, "invalid term ID format", map[string]interface{}{"error": err.Error()})
@@ -166,7 +166,7 @@ func (h *TermHandler) UpdateTerm(c *gin.Context) {
 	var req service.UpdateTermRequest
 
 	// Parse term ID from path
-	idParam := c.Param("id")
+	idParam := c.Param("term_id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
 		errors.BadRequest(c, "invalid term ID format", map[string]interface{}{"error": err.Error()})
@@ -212,7 +212,7 @@ func (h *TermHandler) UpdateTerm(c *gin.Context) {
 // @Router /sessions/{session_id}/terms/{id} [delete]
 func (h *TermHandler) DeleteTerm(c *gin.Context) {
 	// Parse term ID from path
-	idParam := c.Param("id")
+	idParam := c.Param("term_id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
 		errors.BadRequest(c, "invalid term ID format", map[string]interface{}{"error": err.Error()})
@@ -253,7 +253,7 @@ func (h *TermHandler) DeleteTerm(c *gin.Context) {
 // @Router /sessions/{session_id}/terms/{id}/activate [post]
 func (h *TermHandler) ActivateTerm(c *gin.Context) {
 	// Parse term ID from path
-	idParam := c.Param("id")
+	idParam := c.Param("term_id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
 		errors.BadRequest(c, "invalid term ID format", map[string]interface{}{"error": err.Error()})
@@ -295,7 +295,7 @@ func (h *TermHandler) ActivateTerm(c *gin.Context) {
 // @Router /sessions/{session_id}/terms/{id}/complete [post]
 func (h *TermHandler) CompleteTerm(c *gin.Context) {
 	// Parse term ID from path
-	idParam := c.Param("id")
+	idParam := c.Param("term_id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
 		errors.BadRequest(c, "invalid term ID format", map[string]interface{}{"error": err.Error()})
@@ -334,7 +334,7 @@ func (h *TermHandler) CompleteTerm(c *gin.Context) {
 // @Router /sessions/{session_id}/terms/active [get]
 func (h *TermHandler) GetActiveTerm(c *gin.Context) {
 	// Parse session ID from path
-	sessionIDParam := c.Param("session_id")
+	sessionIDParam := c.Param("id")
 	sessionID, err := uuid.Parse(sessionIDParam)
 	if err != nil {
 		errors.BadRequest(c, "invalid session ID format", map[string]interface{}{"error": err.Error()})

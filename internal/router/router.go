@@ -171,16 +171,16 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				sessions.POST("/:id/archive", sessionHandler.ArchiveSession)
 			}
 
-			terms := protected.Group("/sessions/:session_id/terms")
+			terms := protected.Group("/sessions/:id/terms")
 			{
 				terms.GET("/active", termHandler.GetActiveTerm)
 				terms.GET("", termHandler.ListTerms)
 				terms.POST("", termHandler.CreateTerm)
-				terms.GET("/:id", termHandler.GetTerm)
-				terms.PUT("/:id", termHandler.UpdateTerm)
-				terms.DELETE("/:id", termHandler.DeleteTerm)
-				terms.POST("/:id/activate", termHandler.ActivateTerm)
-				terms.POST("/:id/complete", termHandler.CompleteTerm)
+				terms.GET("/:term_id", termHandler.GetTerm)
+				terms.PUT("/:term_id", termHandler.UpdateTerm)
+				terms.DELETE("/:term_id", termHandler.DeleteTerm)
+				terms.POST("/:term_id/activate", termHandler.ActivateTerm)
+				terms.POST("/:term_id/complete", termHandler.CompleteTerm)
 			}
 
 			classes := protected.Group("/classes")

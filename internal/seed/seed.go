@@ -39,7 +39,7 @@ func SeedSuperAdmin(db *sql.DB, config SuperAdminConfig) error {
 
 	// If user exists, skip seeding
 	if existingUser != nil {
-		log.Printf("✓ SuperAdmin already exists: %s (skipping seed)", config.Email)
+		log.Printf("✅ SuperAdmin already exists: %s (skipping seed)", config.Email)
 		return nil
 	}
 
@@ -69,7 +69,7 @@ func SeedSuperAdmin(db *sql.DB, config SuperAdminConfig) error {
 		return fmt.Errorf("failed to create superadmin: %w", err)
 	}
 
-	log.Printf("✓ SuperAdmin created successfully: %s", config.Email)
+	log.Printf("✅ SuperAdmin created successfully: %s", config.Email)
 	log.Printf("  - Role: SUPER_ADMIN")
 	log.Printf("  - Status: ACTIVE")
 	log.Printf("  - Permissions: Full system access")
@@ -93,7 +93,7 @@ func SeedAll(db *sql.DB) error {
 		return fmt.Errorf("failed to seed superadmin: %w", err)
 	}
 
-	log.Println("✓ Database seeding completed")
+	log.Println("✅ Database seeding completed")
 	return nil
 }
 

@@ -26,7 +26,7 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	log.Printf("Starting Arc LMS API in %s mode", cfg.Server.Environment)
+	log.Printf("⚙️ Starting Arc LMS API in %s mode", cfg.Server.Environment)
 
 	db, err := initDatabase(cfg.Database)
 	if err != nil {
@@ -34,7 +34,7 @@ func main() {
 	}
 	defer db.Close()
 
-	log.Println("✓ Database connection established")
+	log.Println("🌐 Database connection established")
 
 	if err := seed.SeedAll(db); err != nil {
 		log.Printf("⚠️  Warning: Failed to seed database: %v", err)
@@ -52,7 +52,7 @@ func main() {
 		log.Fatalf("Failed to connect to Redis: %v", err)
 	}
 
-	log.Println("✓ Redis connection established")
+	log.Println("💿 Redis connection established")
 
 	jwtManager := jwt.NewManager(
 		cfg.JWT.AccessSecret,
@@ -61,7 +61,7 @@ func main() {
 		cfg.JWT.RefreshTTL,
 	)
 
-	log.Println("✓ JWT manager initialized")
+	log.Println("✅ JWT manager initialized")
 
 	allowedOrigins := []string{"http://localhost:3000", "http://localhost:8080"}
 	if cfg.Server.Environment == "production" {
@@ -76,7 +76,7 @@ func main() {
 		AllowedOrigins: allowedOrigins,
 	})
 
-	log.Println("✓ Router configured")
+	log.Println("✅ Router configured")
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Server.Port,
@@ -86,10 +86,10 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("✓ Server starting on port %s", cfg.Server.Port)
-		log.Printf("✓ Swagger UI: http://localhost:%s/docs/index.html", cfg.Server.Port)
-		log.Printf("✓ ReDoc: http://localhost:%s/redoc", cfg.Server.Port)
-		log.Printf("✓ Health check: http://localhost:%s/health", cfg.Server.Port)
+		log.Printf("✅ Server starting on port %s", cfg.Server.Port)
+		log.Printf("✅ Swagger UI: http://localhost:%s/docs/index.html", cfg.Server.Port)
+		log.Printf("✅ ReDoc: http://localhost:%s/redoc", cfg.Server.Port)
+		log.Printf("✅ Health check: http://localhost:%s/health", cfg.Server.Port)
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Failed to start server: %v", err)
@@ -109,7 +109,7 @@ func main() {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
-	log.Println("✓ Server exited gracefully")
+	log.Println("✅ Server exited gracefully")
 }
 
 func initDatabase(cfg config.DatabaseConfig) (*sql.DB, error) {
