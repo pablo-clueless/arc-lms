@@ -17,10 +17,10 @@ import (
 	"arc-lms/internal/config"
 	"arc-lms/internal/pkg/jwt"
 	"arc-lms/internal/router"
+	"arc-lms/internal/seed"
 )
 
 func main() {
-	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
@@ -28,7 +28,6 @@ func main() {
 
 	log.Printf("Starting Arc LMS API in %s mode", cfg.Server.Environment)
 
-	// Initialize database connection
 	db, err := initDatabase(cfg.Database)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
@@ -37,14 +36,16 @@ func main() {
 
 	log.Println("✓ Database connection established")
 
-	// Initialize Redis connection
+	if err := seed.SeedAll(db); err != nil {
+		log.Printf("⚠️  Warning: Failed to seed database: %v", err)
+	}
+
 	redisClient, err := initRedis(cfg.Redis)
 	if err != nil {
 		log.Fatalf("Failed to initialize Redis: %v", err)
 	}
 	defer redisClient.Close()
 
-	// Test Redis connection (use longer timeout for remote connections)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err := redisClient.Ping(ctx).Err(); err != nil {
@@ -53,7 +54,6 @@ func main() {
 
 	log.Println("✓ Redis connection established")
 
-	// Initialize JWT manager
 	jwtManager := jwt.NewManager(
 		cfg.JWT.AccessSecret,
 		cfg.JWT.RefreshSecret,
@@ -63,7 +63,6 @@ func main() {
 
 	log.Println("✓ JWT manager initialized")
 
-	// Set up router
 	allowedOrigins := []string{"http://localhost:3000", "http://localhost:8080"}
 	if cfg.Server.Environment == "production" {
 		allowedOrigins = []string{"https://arc-lms.onrender.com"}
@@ -79,7 +78,6 @@ func main() {
 
 	log.Println("✓ Router configured")
 
-	// Create HTTP server
 	srv := &http.Server{
 		Addr:         ":" + cfg.Server.Port,
 		Handler:      r,
@@ -87,7 +85,6 @@ func main() {
 		WriteTimeout: cfg.Server.WriteTimeout,
 	}
 
-	// Start server in a goroutine
 	go func() {
 		log.Printf("✓ Server starting on port %s", cfg.Server.Port)
 		log.Printf("✓ Swagger UI: http://localhost:%s/docs/index.html", cfg.Server.Port)
@@ -99,14 +96,12 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt signal for graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	log.Println("Shutting down server...")
 
-	// Graceful shutdown with timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 
@@ -117,19 +112,16 @@ func main() {
 	log.Println("✓ Server exited gracefully")
 }
 
-// initDatabase initializes and returns a database connection
 func initDatabase(cfg config.DatabaseConfig) (*sql.DB, error) {
 	db, err := sql.Open("postgres", cfg.URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	// Configure connection pool
 	db.SetMaxOpenConns(cfg.MaxOpenConns)
 	db.SetMaxIdleConns(cfg.MaxIdleConns)
 	db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
 
-	// Test connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -140,18 +132,17 @@ func initDatabase(cfg config.DatabaseConfig) (*sql.DB, error) {
 	return db, nil
 }
 
-// initRedis initializes and returns a Redis client
 func initRedis(cfg config.RedisConfig) (*redis.Client, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:         cfg.Addr,
 		Password:     cfg.Password,
 		DB:           cfg.DB,
 		TLSConfig:    cfg.TLSConfig,
-		DialTimeout:  10 * time.Second,  // Time to establish connection
-		ReadTimeout:  10 * time.Second,  // Time to read response
-		WriteTimeout: 10 * time.Second,  // Time to write request
-		PoolSize:     10,                 // Connection pool size
-		MinIdleConns: 5,                  // Minimum idle connections
+		DialTimeout:  10 * time.Second,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		PoolSize:     10,
+		MinIdleConns: 5,
 	})
 
 	return client, nil
