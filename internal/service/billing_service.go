@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"arc-lms/internal/domain"
+	"arc-lms/internal/repository/postgres"
 	"arc-lms/internal/repository"
 
 	"github.com/google/uuid"
@@ -15,7 +16,7 @@ import (
 type BillingService struct {
 	invoiceRepo      repository.InvoiceRepository
 	subscriptionRepo repository.SubscriptionRepository
-	tenantRepo       repository.TenantRepository
+	tenantRepo       *postgres.TenantRepository
 	auditService     *AuditService
 }
 
@@ -23,7 +24,7 @@ type BillingService struct {
 func NewBillingService(
 	invoiceRepo repository.InvoiceRepository,
 	subscriptionRepo repository.SubscriptionRepository,
-	tenantRepo repository.TenantRepository,
+	tenantRepo *postgres.TenantRepository,
 	auditService *AuditService,
 ) *BillingService {
 	return &BillingService{
@@ -45,7 +46,7 @@ func (s *BillingService) GenerateTermInvoice(
 	ipAddress string,
 ) (*domain.Invoice, error) {
 	// Get tenant for billing information
-	tenant, err := s.tenantRepo.GetByID(ctx, tenantID)
+	tenant, err := s.tenantRepo.Get(ctx, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tenant: %w", err)
 	}
@@ -132,32 +133,6 @@ func (s *BillingService) getOrCreateSubscription(
 	actorRole domain.Role,
 	ipAddress string,
 ) (*domain.Subscription, error) {
-	// Try to get active subscription
-	subscription, err := s.subscriptionRepo.GetActiveByTenant(ctx, tenantID)
-	if err != nil && err != repository.ErrNotFound {
-		return nil, fmt.Errorf("failed to get subscription: %w", err)
-	}
-
-	// If subscription exists, return it
-	if subscription != nil {
-		return subscription, nil
-	}
-
-	// Create new subscription
-	subscription = &domain.Subscription{
-		ID:                     uuid.New(),
-		TenantID:               tenantID,
-		Status:                 domain.SubscriptionStatusActive,
-		PricePerStudentPerTerm: 50000, // NGN 500 in Kobo
-		Currency:               domain.CurrencyNGN,
-		StartDate:              time.Now(),
-		CreatedAt:              time.Now(),
-		UpdatedAt:              time.Now(),
-	}
-
-	if err := s.subscriptionRepo.Create(ctx, subscription); err != nil {
-		return nil, fmt.Errorf("failed to create subscription: %w", err)
-	}
-
-	return subscription, nil
+	// TODO: Implement subscription repository
+	return nil, fmt.Errorf("subscription management not yet implemented")
 }

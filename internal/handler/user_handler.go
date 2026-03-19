@@ -16,14 +16,12 @@ import (
 // UserHandler handles user HTTP requests
 type UserHandler struct {
 	userService *service.UserService
-	validator   *validator.Validator
 }
 
 // NewUserHandler creates a new user handler
 func NewUserHandler(userService *service.UserService) *UserHandler {
 	return &UserHandler{
 		userService: userService,
-		validator:   validator.New(),
 	}
 }
 
@@ -41,20 +39,20 @@ func (h *UserHandler) GetMe(c *gin.Context) {
 	// Get user ID from JWT claims (set by auth middleware)
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, errors.Unauthorized("user not authenticated", nil))
+		errors.Unauthorized(c, "user not authenticated")
 		return
 	}
 
 	id, ok := userID.(uuid.UUID)
 	if !ok {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid user ID format", nil))
+		errors.BadRequest(c, "invalid user ID format", nil)
 		return
 	}
 
 	// Get user
 	user, err := h.userService.GetUser(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, errors.NotFound("user not found", err))
+		errors.NotFound(c, "user not found")
 		return
 	}
 
@@ -79,25 +77,17 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 	// Get user ID from JWT
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, errors.Unauthorized("user not authenticated", nil))
+		errors.Unauthorized(c, "user not authenticated")
 		return
 	}
 
 	id, ok := userID.(uuid.UUID)
 	if !ok {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid user ID format", nil))
+		errors.BadRequest(c, "invalid user ID format", nil)
 		return
 	}
 
-	// Bind JSON request
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid request body", err))
-		return
-	}
-
-	// Validate request
-	if err := h.validator.Validate(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.ValidationError(err))
+	if !validator.BindAndValidate(c, &req) {
 		return
 	}
 
@@ -111,7 +101,7 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 	// Call service
 	user, err := h.userService.UpdateUser(c.Request.Context(), id, &req, id, role, ipAddress)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("failed to update user", err))
+		errors.BadRequest(c, "failed to update user", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -137,13 +127,13 @@ func (h *UserHandler) InviteUser(c *gin.Context) {
 	// Get tenant ID from JWT
 	tenantIDValue, exists := c.Get("tenant_id")
 	if !exists {
-		c.JSON(http.StatusForbidden, errors.Forbidden("tenant context required", nil))
+		errors.Forbidden(c, "tenant context required")
 		return
 	}
 
 	tenantID, ok := tenantIDValue.(uuid.UUID)
 	if !ok {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid tenant ID format", nil))
+		errors.BadRequest(c, "invalid tenant ID format", nil)
 		return
 	}
 
@@ -154,15 +144,7 @@ func (h *UserHandler) InviteUser(c *gin.Context) {
 	roleValue, _ := c.Get("role")
 	actorRole, _ := roleValue.(domain.Role)
 
-	// Bind JSON request
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid request body", err))
-		return
-	}
-
-	// Validate request
-	if err := h.validator.Validate(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.ValidationError(err))
+	if !validator.BindAndValidate(c, &req) {
 		return
 	}
 
@@ -173,10 +155,10 @@ func (h *UserHandler) InviteUser(c *gin.Context) {
 	user, err := h.userService.InviteUser(c.Request.Context(), tenantID, &req, actorID, actorRole, ipAddress)
 	if err != nil {
 		if err == repository.ErrDuplicateKey {
-			c.JSON(http.StatusConflict, errors.Conflict("user with this email already exists", err))
+			errors.Conflict(c, "CONFLICT", "user with this email already exists", map[string]interface{}{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusBadRequest, errors.BadRequest("failed to invite user", err))
+		errors.BadRequest(c, "failed to invite user", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -202,13 +184,13 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 	// Get tenant ID from JWT
 	tenantIDValue, exists := c.Get("tenant_id")
 	if !exists {
-		c.JSON(http.StatusForbidden, errors.Forbidden("tenant context required", nil))
+		errors.Forbidden(c, "tenant context required")
 		return
 	}
 
 	tenantID, ok := tenantIDValue.(uuid.UUID)
 	if !ok {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid tenant ID format", nil))
+		errors.BadRequest(c, "invalid tenant ID format", nil)
 		return
 	}
 
@@ -229,7 +211,7 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 	// Build pagination params
 	params := repository.PaginationParams{
 		Limit:  20, // Default limit
-		Cursor: c.Query("cursor"),
+		Cursor: nil, // TODO: Parse cursor from query string
 	}
 	if limitStr := c.Query("limit"); limitStr != "" {
 		// Parse limit (omitted for brevity - add proper parsing)
@@ -239,7 +221,7 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 	// Call service
 	users, pagination, err := h.userService.ListUsers(c.Request.Context(), tenantID, filters, params)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("failed to list users", err))
+		errors.BadRequest(c, "failed to list users", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -266,7 +248,7 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid user ID format", err))
+		errors.BadRequest(c, "invalid user ID format", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -279,14 +261,14 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 
 	// Check authorization: user can access their own profile or ADMIN can access any in tenant
 	if id != requestingID && role != domain.RoleAdmin && role != domain.RoleSuperAdmin {
-		c.JSON(http.StatusForbidden, errors.Forbidden("insufficient permissions", nil))
+		errors.Forbidden(c, "insufficient permissions")
 		return
 	}
 
 	// Get user
 	user, err := h.userService.GetUser(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, errors.NotFound("user not found", err))
+		errors.NotFound(c, "user not found")
 		return
 	}
 
@@ -296,7 +278,7 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 		requestingTenantID, _ := tenantIDValue.(uuid.UUID)
 
 		if user.TenantID == nil || *user.TenantID != requestingTenantID {
-			c.JSON(http.StatusForbidden, errors.Forbidden("cannot access user from different tenant", nil))
+			errors.Forbidden(c, "cannot access user from different tenant")
 			return
 		}
 	}
@@ -325,7 +307,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid user ID format", err))
+		errors.BadRequest(c, "invalid user ID format", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -336,15 +318,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	roleValue, _ := c.Get("role")
 	actorRole, _ := roleValue.(domain.Role)
 
-	// Bind JSON request
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid request body", err))
-		return
-	}
-
-	// Validate request
-	if err := h.validator.Validate(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.ValidationError(err))
+	if !validator.BindAndValidate(c, &req) {
 		return
 	}
 
@@ -354,7 +328,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	// Call service
 	user, err := h.userService.UpdateUser(c.Request.Context(), id, &req, actorID, actorRole, ipAddress)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("failed to update user", err))
+		errors.BadRequest(c, "failed to update user", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -380,7 +354,7 @@ func (h *UserHandler) DeactivateUser(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid user ID format", err))
+		errors.BadRequest(c, "invalid user ID format", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -389,13 +363,7 @@ func (h *UserHandler) DeactivateUser(c *gin.Context) {
 		Reason string `json:"reason" validate:"required,min=5,max=500"`
 	}
 
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid request body", err))
-		return
-	}
-
-	if err := h.validator.Validate(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.ValidationError(err))
+	if !validator.BindAndValidate(c, &req) {
 		return
 	}
 
@@ -412,7 +380,7 @@ func (h *UserHandler) DeactivateUser(c *gin.Context) {
 	// Call service
 	user, err := h.userService.DeactivateUser(c.Request.Context(), id, req.Reason, actorID, actorRole, ipAddress)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("failed to deactivate user", err))
+		errors.BadRequest(c, "failed to deactivate user", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -436,7 +404,7 @@ func (h *UserHandler) ReactivateUser(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid user ID format", err))
+		errors.BadRequest(c, "invalid user ID format", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -453,7 +421,7 @@ func (h *UserHandler) ReactivateUser(c *gin.Context) {
 	// Call service
 	user, err := h.userService.ReactivateUser(c.Request.Context(), id, actorID, actorRole, ipAddress)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("failed to reactivate user", err))
+		errors.BadRequest(c, "failed to reactivate user", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -478,25 +446,17 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 	// Get user ID from JWT
 	userIDValue, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, errors.Unauthorized("user not authenticated", nil))
+		errors.Unauthorized(c, "user not authenticated")
 		return
 	}
 
 	userID, ok := userIDValue.(uuid.UUID)
 	if !ok {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid user ID format", nil))
+		errors.BadRequest(c, "invalid user ID format", nil)
 		return
 	}
 
-	// Bind JSON request
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid request body", err))
-		return
-	}
-
-	// Validate request
-	if err := h.validator.Validate(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.ValidationError(err))
+	if !validator.BindAndValidate(c, &req) {
 		return
 	}
 
@@ -505,7 +465,7 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 
 	// Call service
 	if err := h.userService.ChangePassword(c.Request.Context(), userID, &req, ipAddress); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("failed to change password", err))
+		errors.BadRequest(c, "failed to change password", map[string]interface{}{"error": err.Error()})
 		return
 	}
 

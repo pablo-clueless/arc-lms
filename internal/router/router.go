@@ -11,56 +11,49 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
+	"arc-lms/internal/handler"
 	"arc-lms/internal/middleware"
 	"arc-lms/internal/pkg/idempotency"
 	"arc-lms/internal/pkg/jwt"
+	"arc-lms/internal/repository/postgres"
+	"arc-lms/internal/service"
 )
 
-// Router configuration
 type RouterConfig struct {
-	DB              *sql.DB
-	RedisClient     *redis.Client
-	JWTManager      *jwt.Manager
-	Environment     string
-	AllowedOrigins  []string
+	DB             *sql.DB
+	RedisClient    *redis.Client
+	JWTManager     *jwt.Manager
+	Environment    string
+	AllowedOrigins []string
 }
 
-// SetupRouter configures and returns the Gin router
 func SetupRouter(cfg *RouterConfig) *gin.Engine {
-	// Set Gin mode
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	router := gin.New()
 
-	// Initialize logger
 	logger := logrus.New()
 	logger.SetOutput(os.Stdout)
 	logger.SetFormatter(&logrus.JSONFormatter{})
 
-	// Global middleware
 	router.Use(middleware.RecoveryMiddleware(logger))
 	router.Use(middleware.LoggerMiddleware(logger))
 	router.Use(middleware.CORSMiddleware(&middleware.CORSConfig{
 		AllowedOrigins: cfg.AllowedOrigins,
 	}))
 
-	// Health check endpoint (no auth required)
 	router.GET("/health", healthCheckHandler)
 	router.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
 
-	// API documentation
 	router.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler,
 		ginSwagger.URL("/api/v1/openapi.json"),
 	))
-
-	// Serve OpenAPI spec
 	router.StaticFile("/api/v1/openapi.json", "./docs/openapi/openapi.json")
 
-	// ReDoc documentation
 	router.GET("/redoc", func(c *gin.Context) {
 		c.Header("Content-Type", "text/html; charset=utf-8")
 		html := `<!DOCTYPE html>
@@ -69,7 +62,7 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 	<title>Arc LMS API Documentation</title>
 	<meta charset="utf-8"/>
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<link href="https://fonts.googleapis.com/css?family=Montserrat:300,400,700|Roboto:300,400,700" rel="stylesheet">
+	<link href="https://fonts.googleapis.com/css?family=Figtree:300,400,700" rel="stylesheet">
 	<style>
 		body { margin: 0; padding: 0; }
 	</style>
@@ -82,26 +75,54 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 		c.String(http.StatusOK, html)
 	})
 
-	// API v1 routes
+	tenantRepo := postgres.NewTenantRepository(cfg.DB)
+	userRepo := postgres.NewUserRepository(cfg.DB)
+	sessionRepo := postgres.NewSessionRepository(cfg.DB)
+	termRepo := postgres.NewTermRepository(cfg.DB)
+	classRepo := postgres.NewClassRepository(cfg.DB)
+	courseRepo := postgres.NewCourseRepository(cfg.DB)
+	enrollmentRepo := postgres.NewEnrollmentRepository(cfg.DB)
+	timetableRepo := postgres.NewTimetableRepository(cfg.DB)
+	auditRepo := postgres.NewAuditRepository(cfg.DB)
+
+	auditService := service.NewAuditService(auditRepo)
+	billingService := service.NewBillingService(nil, nil, nil, auditService) // TODO: Implement billing/invoice repository
+	authService := service.NewAuthService(userRepo, cfg.JWTManager, auditService)
+	userService := service.NewUserService(userRepo, auditService)
+	tenantService := service.NewTenantService(tenantRepo, userRepo, auditService)
+	sessionService := service.NewSessionService(sessionRepo, auditService)
+	termService := service.NewTermService(termRepo, sessionRepo, enrollmentRepo, auditService, billingService)
+	classService := service.NewClassService(classRepo, sessionRepo, auditService)
+	courseService := service.NewCourseService(courseRepo, classRepo, userRepo, auditService)
+	enrollmentService := service.NewEnrollmentService(enrollmentRepo, classRepo, userRepo, sessionRepo, auditService)
+
+	authHandler := handler.NewAuthHandler(authService)
+	userHandler := handler.NewUserHandler(userService)
+	tenantHandler := handler.NewTenantHandler(tenantService)
+	sessionHandler := handler.NewSessionHandler(sessionService)
+	termHandler := handler.NewTermHandler(termService)
+	classHandler := handler.NewClassHandler(classService)
+	courseHandler := handler.NewCourseHandler(courseService)
+	enrollmentHandler := handler.NewEnrollmentHandler(enrollmentService)
+
 	v1 := router.Group("/api/v1")
 	{
-		// Public routes (no authentication required)
 		public := v1.Group("/public")
 		{
-			// Auth endpoints will go here
-			public.POST("/auth/login", placeholderHandler("Login endpoint - to be implemented"))
-			public.POST("/auth/register", placeholderHandler("Register endpoint - to be implemented"))
-			public.POST("/auth/password-reset", placeholderHandler("Password reset endpoint - to be implemented"))
+			public.POST("/auth/login", authHandler.Login)
+			public.POST("/auth/register", authHandler.Register)
+			public.POST("/auth/password-reset", authHandler.RequestPasswordReset)
+			public.POST("/auth/password-reset/confirm", authHandler.ResetPassword)
+			public.POST("/auth/refresh", authHandler.RefreshToken)
+			public.GET("/auth/invitation/validate", authHandler.ValidateInvitation)
+			public.POST("/auth/invitation/accept", authHandler.AcceptInvitation)
 		}
 
-		// Protected routes (authentication required)
 		protected := v1.Group("")
 		protected.Use(middleware.AuthMiddleware(cfg.JWTManager))
 
-		// Initialize idempotency store
 		idempotencyStore := idempotency.NewStore(cfg.RedisClient)
 
-		// Apply rate limiting and idempotency to protected routes
 		protected.Use(middleware.RateLimitMiddleware(cfg.RedisClient, &middleware.RateLimitConfig{
 			TenantRateLimit:     1000,
 			SuperAdminRateLimit: 2000,
@@ -112,74 +133,87 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 		protected.Use(middleware.IdempotencyMiddleware(idempotencyStore))
 
 		{
-			// Tenant routes (SUPER_ADMIN only)
 			tenants := protected.Group("/tenants")
-			// tenants.Use(middleware.RequireRole("SUPER_ADMIN"))
 			{
-				tenants.GET("", placeholderHandler("List tenants"))
-				tenants.POST("", placeholderHandler("Create tenant"))
-				tenants.GET("/:id", placeholderHandler("Get tenant"))
-				tenants.PUT("/:id", placeholderHandler("Update tenant"))
-				tenants.DELETE("/:id", placeholderHandler("Delete tenant"))
-				tenants.POST("/:id/suspend", placeholderHandler("Suspend tenant"))
-				tenants.POST("/:id/reactivate", placeholderHandler("Reactivate tenant"))
+				tenants.GET("", tenantHandler.ListTenants)
+				tenants.POST("", tenantHandler.CreateTenant)
+				tenants.GET("/:id", tenantHandler.GetTenant)
+				tenants.PUT("/:id", tenantHandler.UpdateTenant)
+				tenants.DELETE("/:id", tenantHandler.DeleteTenant)
+				tenants.POST("/:id/suspend", tenantHandler.SuspendTenant)
+				tenants.POST("/:id/reactivate", tenantHandler.ReactivateTenant)
+				tenants.GET("/:id/configuration", tenantHandler.GetTenantConfiguration)
+				tenants.PUT("/:id/configuration", tenantHandler.UpdateTenantConfiguration)
 			}
 
-			// User routes
 			users := protected.Group("/users")
 			{
-				users.GET("/me", placeholderHandler("Get current user profile"))
-				users.PUT("/me", placeholderHandler("Update current user profile"))
-				users.POST("/invite", placeholderHandler("Invite user"))
-				users.GET("", placeholderHandler("List users"))
-				users.GET("/:id", placeholderHandler("Get user"))
-				users.PUT("/:id", placeholderHandler("Update user"))
-				users.POST("/:id/deactivate", placeholderHandler("Deactivate user"))
+				users.GET("/me", userHandler.GetMe)
+				users.PUT("/me", userHandler.UpdateMe)
+				users.PUT("/me/password", userHandler.ChangePassword)
+				users.POST("/invite", userHandler.InviteUser)
+				users.GET("", userHandler.ListUsers)
+				users.GET("/:id", userHandler.GetUser)
+				users.PUT("/:id", userHandler.UpdateUser)
+				users.POST("/:id/deactivate", userHandler.DeactivateUser)
+				users.POST("/:id/reactivate", userHandler.ReactivateUser)
 			}
 
-			// Session routes
 			sessions := protected.Group("/sessions")
 			{
-				sessions.GET("", placeholderHandler("List sessions"))
-				sessions.POST("", placeholderHandler("Create session"))
-				sessions.GET("/:id", placeholderHandler("Get session"))
-				sessions.PUT("/:id", placeholderHandler("Update session"))
-				sessions.DELETE("/:id", placeholderHandler("Delete session"))
-				sessions.POST("/:id/activate", placeholderHandler("Activate session"))
+				sessions.GET("/active", sessionHandler.GetActiveSession)
+				sessions.GET("", sessionHandler.ListSessions)
+				sessions.POST("", sessionHandler.CreateSession)
+				sessions.GET("/:id", sessionHandler.GetSession)
+				sessions.PUT("/:id", sessionHandler.UpdateSession)
+				sessions.DELETE("/:id", sessionHandler.DeleteSession)
+				sessions.POST("/:id/activate", sessionHandler.ActivateSession)
+				sessions.POST("/:id/archive", sessionHandler.ArchiveSession)
 			}
 
-			// Term routes
 			terms := protected.Group("/sessions/:session_id/terms")
 			{
-				terms.GET("", placeholderHandler("List terms"))
-				terms.POST("", placeholderHandler("Create term"))
-				terms.GET("/:id", placeholderHandler("Get term"))
-				terms.PUT("/:id", placeholderHandler("Update term"))
-				terms.DELETE("/:id", placeholderHandler("Delete term"))
-				terms.POST("/:id/activate", placeholderHandler("Activate term"))
+				terms.GET("/active", termHandler.GetActiveTerm)
+				terms.GET("", termHandler.ListTerms)
+				terms.POST("", termHandler.CreateTerm)
+				terms.GET("/:id", termHandler.GetTerm)
+				terms.PUT("/:id", termHandler.UpdateTerm)
+				terms.DELETE("/:id", termHandler.DeleteTerm)
+				terms.POST("/:id/activate", termHandler.ActivateTerm)
+				terms.POST("/:id/complete", termHandler.CompleteTerm)
 			}
 
-			// Class routes
 			classes := protected.Group("/classes")
 			{
-				classes.GET("", placeholderHandler("List classes"))
-				classes.POST("", placeholderHandler("Create class"))
-				classes.GET("/:id", placeholderHandler("Get class"))
-				classes.PUT("/:id", placeholderHandler("Update class"))
-				classes.DELETE("/:id", placeholderHandler("Delete class"))
+				classes.GET("", classHandler.ListClasses)
+				classes.POST("", classHandler.CreateClass)
+				classes.GET("/:id", classHandler.GetClass)
+				classes.PUT("/:id", classHandler.UpdateClass)
+				classes.DELETE("/:id", classHandler.DeleteClass)
 			}
 
-			// Course routes
 			courses := protected.Group("/courses")
 			{
-				courses.GET("", placeholderHandler("List courses"))
-				courses.POST("", placeholderHandler("Create course"))
-				courses.GET("/:id", placeholderHandler("Get course"))
-				courses.PUT("/:id", placeholderHandler("Update course"))
-				courses.DELETE("/:id", placeholderHandler("Delete course"))
+				courses.GET("", courseHandler.ListCourses)
+				courses.POST("", courseHandler.CreateCourse)
+				courses.GET("/:id", courseHandler.GetCourse)
+				courses.PUT("/:id", courseHandler.UpdateCourse)
+				courses.DELETE("/:id", courseHandler.DeleteCourse)
+				courses.POST("/:id/reassign-tutor", courseHandler.ReassignTutor)
 			}
 
-			// Timetable routes
+			enrollments := protected.Group("/enrollments")
+			{
+				enrollments.GET("", enrollmentHandler.ListEnrollments)
+				enrollments.POST("", enrollmentHandler.EnrollStudent)
+				enrollments.GET("/:id", enrollmentHandler.GetEnrollment)
+				enrollments.POST("/:id/transfer", enrollmentHandler.TransferStudent)
+				enrollments.POST("/:id/withdraw", enrollmentHandler.WithdrawStudent)
+				enrollments.POST("/:id/suspend", enrollmentHandler.SuspendEnrollment)
+				enrollments.POST("/:id/reactivate", enrollmentHandler.ReactivateEnrollment)
+			}
+
+			// Timetable routes (placeholders for now)
 			timetables := protected.Group("/timetables")
 			{
 				timetables.GET("", placeholderHandler("List timetables"))
@@ -188,10 +222,9 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				timetables.POST("/:id/publish", placeholderHandler("Publish timetable"))
 			}
 
-			// Assessment routes (Quizzes and Assignments)
+			// Assessment routes (placeholders for now)
 			assessments := protected.Group("/assessments")
 			{
-				// Quizzes
 				quizzes := assessments.Group("/quizzes")
 				{
 					quizzes.GET("", placeholderHandler("List quizzes"))
@@ -203,7 +236,6 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 					quizzes.POST("/:id/grade", placeholderHandler("Grade quiz"))
 				}
 
-				// Assignments
 				assignments := assessments.Group("/assignments")
 				{
 					assignments.GET("", placeholderHandler("List assignments"))
@@ -216,7 +248,7 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				}
 			}
 
-			// Examination routes
+			// Examination routes (placeholders)
 			examinations := protected.Group("/examinations")
 			{
 				examinations.GET("", placeholderHandler("List examinations"))
@@ -229,7 +261,7 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				examinations.POST("/:id/publish-results", placeholderHandler("Publish results"))
 			}
 
-			// Progress and Report Cards
+			// Progress routes (placeholders)
 			progress := protected.Group("/progress")
 			{
 				progress.GET("/students/:student_id", placeholderHandler("Get student progress"))
@@ -237,7 +269,7 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				progress.GET("/report-cards/:student_id", placeholderHandler("Get report card"))
 			}
 
-			// Meeting routes
+			// Meeting routes (placeholders)
 			meetings := protected.Group("/meetings")
 			{
 				meetings.GET("", placeholderHandler("List meetings"))
@@ -249,7 +281,7 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				meetings.POST("/:id/cancel", placeholderHandler("Cancel meeting"))
 			}
 
-			// Communication routes
+			// Communication routes (placeholders)
 			communications := protected.Group("/communications")
 			{
 				communications.POST("/emails", placeholderHandler("Send email"))
@@ -257,7 +289,7 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				communications.GET("/emails/:id", placeholderHandler("Get email"))
 			}
 
-			// Notification routes
+			// Notification routes (placeholders)
 			notifications := protected.Group("/notifications")
 			{
 				notifications.GET("", placeholderHandler("List notifications"))
@@ -266,7 +298,7 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				notifications.POST("/mark-all-read", placeholderHandler("Mark all as read"))
 			}
 
-			// Billing routes
+			// Billing routes (placeholders)
 			billing := protected.Group("/billing")
 			{
 				billing.GET("/subscriptions", placeholderHandler("List subscriptions"))
@@ -275,7 +307,7 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				billing.POST("/invoices/:id/pay", placeholderHandler("Mark invoice as paid"))
 			}
 
-			// Audit routes
+			// Audit routes (placeholders)
 			audit := protected.Group("/audit")
 			{
 				audit.GET("/logs", placeholderHandler("List audit logs"))
@@ -284,10 +316,12 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 		}
 	}
 
+	// Suppress unused variable warnings
+	_ = timetableRepo
+
 	return router
 }
 
-// healthCheckHandler returns API health status
 func healthCheckHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "healthy",
@@ -296,7 +330,6 @@ func healthCheckHandler(c *gin.Context) {
 	})
 }
 
-// placeholderHandler returns a placeholder response for unimplemented endpoints
 func placeholderHandler(message string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{

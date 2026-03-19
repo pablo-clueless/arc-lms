@@ -1,7 +1,9 @@
 package config
 
 import (
+	"crypto/tls"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -29,9 +31,10 @@ type DatabaseConfig struct {
 }
 
 type RedisConfig struct {
-	Addr     string
-	Password string
-	DB       int
+	Addr      string
+	Password  string
+	DB        int
+	TLSConfig *tls.Config
 }
 
 type JWTConfig struct {
@@ -56,11 +59,7 @@ func Load() (*Config, error) {
 			MaxIdleConns:    getIntEnv("DB_MAX_IDLE_CONNS", 25),
 			ConnMaxLifetime: getDurationEnv("DB_CONN_MAX_LIFETIME", 5*time.Minute),
 		},
-		Redis: RedisConfig{
-			Addr:     getEnv("REDIS_ADDR", "localhost:6379"),
-			Password: getEnv("REDIS_PASSWORD", ""),
-			DB:       getIntEnv("REDIS_DB", 0),
-		},
+		Redis: parseRedisConfig(),
 		JWT: JWTConfig{
 			AccessSecret:  getEnv("JWT_ACCESS_SECRET", ""),
 			RefreshSecret: getEnv("JWT_REFRESH_SECRET", ""),
@@ -114,4 +113,65 @@ func getDurationEnv(key string, defaultValue time.Duration) time.Duration {
 		}
 	}
 	return defaultValue
+}
+
+// parseRedisConfig parses Redis configuration from REDIS_URL or individual env vars
+func parseRedisConfig() RedisConfig {
+	// Check if REDIS_URL is provided
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL != "" {
+		return parseRedisURL(redisURL)
+	}
+
+	// Fall back to individual environment variables
+	return RedisConfig{
+		Addr:      getEnv("REDIS_ADDR", "localhost:6379"),
+		Password:  getEnv("REDIS_PASSWORD", ""),
+		DB:        getIntEnv("REDIS_DB", 0),
+		TLSConfig: nil,
+	}
+}
+
+// parseRedisURL parses a Redis URL (redis:// or rediss://)
+func parseRedisURL(redisURL string) RedisConfig {
+	parsedURL, err := url.Parse(redisURL)
+	if err != nil {
+		// Fall back to defaults if parsing fails
+		return RedisConfig{
+			Addr:      "localhost:6379",
+			Password:  "",
+			DB:        0,
+			TLSConfig: nil,
+		}
+	}
+
+	config := RedisConfig{
+		Addr:      parsedURL.Host,
+		Password:  "",
+		DB:        0,
+		TLSConfig: nil,
+	}
+
+	// Extract password from URL
+	if parsedURL.User != nil {
+		password, _ := parsedURL.User.Password()
+		config.Password = password
+	}
+
+	// Extract database number from path
+	if len(parsedURL.Path) > 1 {
+		dbStr := parsedURL.Path[1:] // Remove leading "/"
+		if db, err := strconv.Atoi(dbStr); err == nil {
+			config.DB = db
+		}
+	}
+
+	// Enable TLS for rediss:// scheme
+	if parsedURL.Scheme == "rediss" {
+		config.TLSConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		}
+	}
+
+	return config
 }

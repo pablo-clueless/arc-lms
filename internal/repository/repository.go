@@ -262,3 +262,131 @@ func FromNullString(ns sql.NullString) *string {
 func ToNullTime(t *interface{}) sql.NullTime {
 	return sql.NullTime{Valid: false}
 }
+
+// Transaction represents a database transaction context
+type Transaction *sql.Tx
+
+// Import statement needed at top of file
+// Note: These interfaces define contracts for repository implementations in postgres/ package
+
+// TenantRepository defines methods for tenant data access
+type TenantRepository interface {
+	Create(ctx context.Context, tenant interface{}) error
+	Get(ctx context.Context, id uuid.UUID) (interface{}, error)
+	Update(ctx context.Context, tenant interface{}) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	List(ctx context.Context, status interface{}, params PaginationParams) (interface{}, error)
+	Suspend(ctx context.Context, id uuid.UUID, reason string, tx *sql.Tx) error
+	Reactivate(ctx context.Context, id uuid.UUID, tx *sql.Tx) error
+}
+
+// UserRepository defines methods for user data access
+type UserRepository interface {
+	Create(ctx context.Context, user interface{}) error
+	GetByID(ctx context.Context, id uuid.UUID) (interface{}, error)
+	GetByEmail(ctx context.Context, email string) (interface{}, error)
+	Update(ctx context.Context, user interface{}) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	List(ctx context.Context, tenantID *uuid.UUID, role interface{}, status interface{}, params PaginationParams) (interface{}, error)
+	Deactivate(ctx context.Context, id uuid.UUID, reason string) error
+	Reactivate(ctx context.Context, id uuid.UUID) error
+	SetPasswordResetToken(ctx context.Context, id uuid.UUID, token string, expiry interface{}) error
+	ClearPasswordResetToken(ctx context.Context, id uuid.UUID) error
+	SetInvitationToken(ctx context.Context, id uuid.UUID, token string, expiry interface{}) error
+	ClearInvitationToken(ctx context.Context, id uuid.UUID) error
+	UpdatePassword(ctx context.Context, id uuid.UUID, passwordHash string) error
+	RecordLogin(ctx context.Context, id uuid.UUID) error
+}
+
+// SessionRepository defines methods for session data access
+type SessionRepository interface {
+	Create(ctx context.Context, session interface{}) error
+	GetByID(ctx context.Context, id uuid.UUID) (interface{}, error)
+	Update(ctx context.Context, session interface{}) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	List(ctx context.Context, tenantID uuid.UUID, status interface{}, params PaginationParams) (interface{}, error)
+	GetActiveSession(ctx context.Context, tenantID uuid.UUID) (interface{}, error)
+	Activate(ctx context.Context, id uuid.UUID, tx *sql.Tx) error
+	Archive(ctx context.Context, id uuid.UUID) error
+}
+
+// TermRepository defines methods for term data access
+type TermRepository interface {
+	Create(ctx context.Context, term interface{}) error
+	GetByID(ctx context.Context, id uuid.UUID) (interface{}, error)
+	Update(ctx context.Context, term interface{}) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	List(ctx context.Context, sessionID uuid.UUID, status interface{}, params PaginationParams) (interface{}, error)
+	GetActiveTerm(ctx context.Context, sessionID uuid.UUID) (interface{}, error)
+	Activate(ctx context.Context, id uuid.UUID, studentCount int, tx *sql.Tx) error
+	Complete(ctx context.Context, id uuid.UUID) error
+}
+
+// ClassRepository defines methods for class data access
+type ClassRepository interface {
+	Create(ctx context.Context, class interface{}) error
+	GetByID(ctx context.Context, id uuid.UUID) (interface{}, error)
+	Update(ctx context.Context, class interface{}) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	List(ctx context.Context, tenantID uuid.UUID, sessionID *uuid.UUID, params PaginationParams) (interface{}, error)
+}
+
+// CourseRepository defines methods for course data access
+type CourseRepository interface {
+	Create(ctx context.Context, course interface{}) error
+	GetByID(ctx context.Context, id uuid.UUID) (interface{}, error)
+	Update(ctx context.Context, course interface{}) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	List(ctx context.Context, tenantID uuid.UUID, classID *uuid.UUID, termID *uuid.UUID, tutorID *uuid.UUID, params PaginationParams) (interface{}, error)
+	ReassignTutor(ctx context.Context, courseID uuid.UUID, newTutorID uuid.UUID, tx *sql.Tx) error
+}
+
+// EnrollmentRepository defines methods for enrollment data access
+type EnrollmentRepository interface {
+	Create(ctx context.Context, enrollment interface{}) error
+	GetByID(ctx context.Context, id uuid.UUID) (interface{}, error)
+	Update(ctx context.Context, enrollment interface{}) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	List(ctx context.Context, tenantID uuid.UUID, classID *uuid.UUID, sessionID *uuid.UUID, status interface{}, params PaginationParams) (interface{}, error)
+	Transfer(ctx context.Context, id uuid.UUID, newClassID uuid.UUID, reason string, tx *sql.Tx) error
+	Withdraw(ctx context.Context, id uuid.UUID, reason string, tx *sql.Tx) error
+	Suspend(ctx context.Context, id uuid.UUID, reason string, tx *sql.Tx) error
+	Reactivate(ctx context.Context, id uuid.UUID, tx *sql.Tx) error
+	CountActiveStudents(ctx context.Context, sessionID uuid.UUID) (int, error)
+}
+
+// TimetableRepository defines methods for timetable data access
+type TimetableRepository interface {
+	Create(ctx context.Context, timetable interface{}) error
+	GetByID(ctx context.Context, id uuid.UUID) (interface{}, error)
+	Update(ctx context.Context, timetable interface{}) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	List(ctx context.Context, tenantID uuid.UUID, classID *uuid.UUID, termID *uuid.UUID, status interface{}, params PaginationParams) (interface{}, error)
+	Publish(ctx context.Context, id uuid.UUID) error
+}
+
+// AuditRepository defines methods for audit log data access
+type AuditRepository interface {
+	Create(ctx context.Context, auditLog interface{}) error
+	GetByID(ctx context.Context, id uuid.UUID) (interface{}, error)
+	List(ctx context.Context, filters interface{}, params PaginationParams) (interface{}, error)
+	GetByResource(ctx context.Context, resourceType interface{}, resourceID uuid.UUID, params PaginationParams) (interface{}, error)
+}
+
+// InvoiceRepository defines methods for invoice data access
+type InvoiceRepository interface {
+	Create(ctx context.Context, invoice interface{}) error
+	GetByID(ctx context.Context, id uuid.UUID) (interface{}, error)
+	Update(ctx context.Context, invoice interface{}) error
+	List(ctx context.Context, tenantID uuid.UUID, status interface{}, params PaginationParams) (interface{}, error)
+	MarkAsPaid(ctx context.Context, id uuid.UUID, tx *sql.Tx) error
+}
+
+// SubscriptionRepository defines methods for subscription data access
+type SubscriptionRepository interface {
+	Create(ctx context.Context, subscription interface{}) error
+	GetByID(ctx context.Context, id uuid.UUID) (interface{}, error)
+	GetByTenant(ctx context.Context, tenantID uuid.UUID) (interface{}, error)
+	Update(ctx context.Context, subscription interface{}) error
+	List(ctx context.Context, status interface{}, params PaginationParams) (interface{}, error)
+}

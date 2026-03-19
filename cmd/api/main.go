@@ -44,8 +44,8 @@ func main() {
 	}
 	defer redisClient.Close()
 
-	// Test Redis connection
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Test Redis connection (use longer timeout for remote connections)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		log.Fatalf("Failed to connect to Redis: %v", err)
@@ -143,9 +143,15 @@ func initDatabase(cfg config.DatabaseConfig) (*sql.DB, error) {
 // initRedis initializes and returns a Redis client
 func initRedis(cfg config.RedisConfig) (*redis.Client, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr:     cfg.Addr,
-		Password: cfg.Password,
-		DB:       cfg.DB,
+		Addr:         cfg.Addr,
+		Password:     cfg.Password,
+		DB:           cfg.DB,
+		TLSConfig:    cfg.TLSConfig,
+		DialTimeout:  10 * time.Second,  // Time to establish connection
+		ReadTimeout:  10 * time.Second,  // Time to read response
+		WriteTimeout: 10 * time.Second,  // Time to write request
+		PoolSize:     10,                 // Connection pool size
+		MinIdleConns: 5,                  // Minimum idle connections
 	})
 
 	return client, nil

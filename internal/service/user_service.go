@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"arc-lms/internal/domain"
+	"arc-lms/internal/repository/postgres"
 	"arc-lms/internal/repository"
 
 	"github.com/google/uuid"
@@ -15,14 +16,14 @@ import (
 
 // UserService handles user management operations
 type UserService struct {
-	userRepo     repository.UserRepository
+	userRepo     *postgres.UserRepository
 	auditService *AuditService
 	// emailService would go here for sending invitations
 }
 
 // NewUserService creates a new user service
 func NewUserService(
-	userRepo repository.UserRepository,
+	userRepo *postgres.UserRepository,
 	auditService *AuditService,
 ) *UserService {
 	return &UserService{
@@ -246,17 +247,31 @@ func (s *UserService) ListUsers(
 	filters *UserFilters,
 	params repository.PaginationParams,
 ) ([]*domain.User, *repository.PaginatedResult, error) {
-	users, pagination, err := s.userRepo.ListByTenant(ctx, tenantID, filters, params)
+	var role *domain.Role
+	var status *domain.UserStatus
+	if filters != nil {
+		role = filters.Role
+		status = filters.Status
+	}
+
+	users, err := s.userRepo.List(ctx, &tenantID, role, status, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list users: %w", err)
 	}
+
+	// Build pagination result
+	ids := make([]uuid.UUID, len(users))
+	for i, user := range users {
+		ids[i] = user.ID
+	}
+	pagination := repository.BuildPaginatedResult(ids, params.Limit)
 
 	// Remove sensitive fields from all users
 	for _, user := range users {
 		user.PasswordHash = ""
 	}
 
-	return users, pagination, nil
+	return users, &pagination, nil
 }
 
 // InviteUser sends an invitation email to a new user

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"arc-lms/internal/domain"
+	"arc-lms/internal/repository/postgres"
 	"arc-lms/internal/repository"
 
 	"github.com/google/uuid"
@@ -13,13 +14,13 @@ import (
 
 // SessionService handles academic session operations
 type SessionService struct {
-	sessionRepo  repository.SessionRepository
+	sessionRepo  *postgres.SessionRepository
 	auditService *AuditService
 }
 
 // NewSessionService creates a new session service
 func NewSessionService(
-	sessionRepo repository.SessionRepository,
+	sessionRepo *postgres.SessionRepository,
 	auditService *AuditService,
 ) *SessionService {
 	return &SessionService{
@@ -63,15 +64,7 @@ func (s *SessionService) CreateSession(
 		return nil, fmt.Errorf("end year must be after start year")
 	}
 
-	// Check if a session with the same label already exists for this tenant
-	existing, err := s.sessionRepo.GetByLabel(ctx, tenantID, req.Label)
-	if err != nil && err != repository.ErrNotFound {
-		return nil, fmt.Errorf("failed to check session label: %w", err)
-	}
-	if existing != nil {
-		return nil, repository.ErrDuplicateKey
-	}
-
+	// Database constraint enforces unique labels per tenant
 	// Create session
 	session := &domain.Session{
 		ID:          uuid.New(),
@@ -85,7 +78,7 @@ func (s *SessionService) CreateSession(
 		UpdatedAt:   time.Now(),
 	}
 
-	if err := s.sessionRepo.Create(ctx, session); err != nil {
+	if err := s.sessionRepo.Create(ctx, session, nil); err != nil {
 		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
@@ -108,7 +101,7 @@ func (s *SessionService) CreateSession(
 
 // GetSession gets a session by ID
 func (s *SessionService) GetSession(ctx context.Context, id uuid.UUID) (*domain.Session, error) {
-	session, err := s.sessionRepo.GetByID(ctx, id)
+	session, err := s.sessionRepo.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
@@ -125,7 +118,7 @@ func (s *SessionService) UpdateSession(
 	ipAddress string,
 ) (*domain.Session, error) {
 	// Get existing session
-	session, err := s.sessionRepo.GetByID(ctx, id)
+	session, err := s.sessionRepo.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
@@ -142,7 +135,7 @@ func (s *SessionService) UpdateSession(
 	}
 	session.UpdatedAt = time.Now()
 
-	if err := s.sessionRepo.Update(ctx, session); err != nil {
+	if err := s.sessionRepo.Update(ctx, session, nil); err != nil {
 		return nil, fmt.Errorf("failed to update session: %w", err)
 	}
 
@@ -172,7 +165,7 @@ func (s *SessionService) DeleteSession(
 	ipAddress string,
 ) error {
 	// Get session for audit
-	session, err := s.sessionRepo.GetByID(ctx, id)
+	session, err := s.sessionRepo.Get(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to get session: %w", err)
 	}
@@ -211,11 +204,24 @@ func (s *SessionService) ListSessions(
 	filters *SessionFilters,
 	params repository.PaginationParams,
 ) ([]*domain.Session, *repository.PaginatedResult, error) {
-	sessions, pagination, err := s.sessionRepo.ListByTenant(ctx, tenantID, filters, params)
+	var status *domain.SessionStatus
+	if filters != nil {
+		status = filters.Status
+	}
+
+	sessions, err := s.sessionRepo.ListByTenant(ctx, tenantID, status, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list sessions: %w", err)
 	}
-	return sessions, pagination, nil
+
+	// Build pagination result
+	ids := make([]uuid.UUID, len(sessions))
+	for i, session := range sessions {
+		ids[i] = session.ID
+	}
+	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+
+	return sessions, &pagination, nil
 }
 
 // ActivateSession activates a session (enforces BR-007: one active per tenant)
@@ -227,7 +233,7 @@ func (s *SessionService) ActivateSession(
 	ipAddress string,
 ) (*domain.Session, error) {
 	// Get session
-	session, err := s.sessionRepo.GetByID(ctx, id)
+	session, err := s.sessionRepo.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
@@ -247,7 +253,7 @@ func (s *SessionService) ActivateSession(
 	// Activate session
 	session.Activate()
 
-	if err := s.sessionRepo.Update(ctx, session); err != nil {
+	if err := s.sessionRepo.Update(ctx, session, nil); err != nil {
 		return nil, fmt.Errorf("failed to activate session: %w", err)
 	}
 
@@ -277,7 +283,7 @@ func (s *SessionService) ArchiveSession(
 	ipAddress string,
 ) (*domain.Session, error) {
 	// Get session
-	session, err := s.sessionRepo.GetByID(ctx, id)
+	session, err := s.sessionRepo.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
@@ -288,7 +294,7 @@ func (s *SessionService) ArchiveSession(
 	// Archive session
 	session.Archive()
 
-	if err := s.sessionRepo.Update(ctx, session); err != nil {
+	if err := s.sessionRepo.Update(ctx, session, nil); err != nil {
 		return nil, fmt.Errorf("failed to archive session: %w", err)
 	}
 

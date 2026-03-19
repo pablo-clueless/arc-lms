@@ -38,14 +38,21 @@ const (
 	// Class/Course actions
 	AuditActionClassCreated       AuditAction = "CLASS_CREATED"
 	AuditActionClassUpdated       AuditAction = "CLASS_UPDATED"
+	AuditActionClassDeleted       AuditAction = "CLASS_DELETED"
 	AuditActionCourseCreated      AuditAction = "COURSE_CREATED"
 	AuditActionCourseUpdated      AuditAction = "COURSE_UPDATED"
+	AuditActionCourseDeleted      AuditAction = "COURSE_DELETED"
 	AuditActionTutorReassigned    AuditAction = "TUTOR_REASSIGNED"
 
 	// Enrollment actions
-	AuditActionStudentEnrolled    AuditAction = "STUDENT_ENROLLED"
-	AuditActionStudentTransferred AuditAction = "STUDENT_TRANSFERRED"
-	AuditActionStudentWithdrawn   AuditAction = "STUDENT_WITHDRAWN"
+	AuditActionStudentEnrolled       AuditAction = "STUDENT_ENROLLED"
+	AuditActionEnrollmentCreated     AuditAction = "ENROLLMENT_CREATED"
+	AuditActionEnrollmentUpdated     AuditAction = "ENROLLMENT_UPDATED"
+	AuditActionStudentTransferred    AuditAction = "STUDENT_TRANSFERRED"
+	AuditActionStudentWithdrawn      AuditAction = "STUDENT_WITHDRAWN"
+	AuditActionEnrollmentWithdrawn   AuditAction = "ENROLLMENT_WITHDRAWN"
+	AuditActionEnrollmentSuspended   AuditAction = "ENROLLMENT_SUSPENDED"
+	AuditActionEnrollmentReactivated AuditAction = "ENROLLMENT_REACTIVATED"
 
 	// Timetable actions
 	AuditActionTimetableGenerated AuditAction = "TIMETABLE_GENERATED"

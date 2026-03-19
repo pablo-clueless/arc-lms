@@ -571,3 +571,20 @@ func (r *EnrollmentRepository) ValidateTenantAccess(ctx context.Context, tenantI
 
 	return nil
 }
+
+// CountActiveStudents counts active enrollments for a session (for billing)
+func (r *EnrollmentRepository) CountActiveStudents(ctx context.Context, tenantID uuid.UUID, sessionID uuid.UUID) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM enrollments
+		WHERE tenant_id = $1 AND session_id = $2 AND status = $3
+	`
+
+	var count int
+	err := r.GetDB().QueryRowContext(ctx, query, tenantID, sessionID, domain.EnrollmentStatusActive).Scan(&count)
+	if err != nil {
+		return 0, repository.ParseError(err)
+	}
+
+	return count, nil
+}

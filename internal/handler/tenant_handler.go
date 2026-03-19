@@ -16,14 +16,12 @@ import (
 // TenantHandler handles tenant HTTP requests
 type TenantHandler struct {
 	tenantService *service.TenantService
-	validator     *validator.Validator
 }
 
 // NewTenantHandler creates a new tenant handler
 func NewTenantHandler(tenantService *service.TenantService) *TenantHandler {
 	return &TenantHandler{
 		tenantService: tenantService,
-		validator:     validator.New(),
 	}
 }
 
@@ -50,15 +48,7 @@ func (h *TenantHandler) CreateTenant(c *gin.Context) {
 	roleValue, _ := c.Get("role")
 	actorRole, _ := roleValue.(domain.Role)
 
-	// Bind JSON request
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid request body", err))
-		return
-	}
-
-	// Validate request
-	if err := h.validator.Validate(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.ValidationError(err))
+	if !validator.BindAndValidate(c, &req) {
 		return
 	}
 
@@ -69,10 +59,10 @@ func (h *TenantHandler) CreateTenant(c *gin.Context) {
 	tenant, admin, err := h.tenantService.CreateTenant(c.Request.Context(), &req, actorID, actorRole, ipAddress)
 	if err != nil {
 		if err == repository.ErrDuplicateKey {
-			c.JSON(http.StatusConflict, errors.Conflict("tenant or admin email already exists", err))
+			errors.Conflict(c, "CONFLICT", "tenant or admin email already exists", map[string]interface{}{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusBadRequest, errors.BadRequest("failed to create tenant", err))
+		errors.BadRequest(c, "failed to create tenant", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -115,13 +105,13 @@ func (h *TenantHandler) ListTenants(c *gin.Context) {
 	// Build pagination params
 	params := repository.PaginationParams{
 		Limit:  20, // Default limit
-		Cursor: c.Query("cursor"),
+		Cursor: nil, // TODO: Parse cursor from query string
 	}
 
 	// Call service
 	tenants, pagination, err := h.tenantService.ListTenants(c.Request.Context(), filters, params)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("failed to list tenants", err))
+		errors.BadRequest(c, "failed to list tenants", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -148,14 +138,14 @@ func (h *TenantHandler) GetTenant(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid tenant ID format", err))
+		errors.BadRequest(c, "invalid tenant ID format", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
 	// Call service
 	tenant, err := h.tenantService.GetTenant(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, errors.NotFound("tenant not found", err))
+		errors.NotFound(c, "tenant not found")
 		return
 	}
 
@@ -183,7 +173,7 @@ func (h *TenantHandler) UpdateTenant(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid tenant ID format", err))
+		errors.BadRequest(c, "invalid tenant ID format", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -194,15 +184,7 @@ func (h *TenantHandler) UpdateTenant(c *gin.Context) {
 	roleValue, _ := c.Get("role")
 	actorRole, _ := roleValue.(domain.Role)
 
-	// Bind JSON request
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid request body", err))
-		return
-	}
-
-	// Validate request
-	if err := h.validator.Validate(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.ValidationError(err))
+	if !validator.BindAndValidate(c, &req) {
 		return
 	}
 
@@ -212,7 +194,7 @@ func (h *TenantHandler) UpdateTenant(c *gin.Context) {
 	// Call service
 	tenant, err := h.tenantService.UpdateTenant(c.Request.Context(), id, &req, actorID, actorRole, ipAddress)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("failed to update tenant", err))
+		errors.BadRequest(c, "failed to update tenant", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -236,7 +218,7 @@ func (h *TenantHandler) DeleteTenant(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid tenant ID format", err))
+		errors.BadRequest(c, "invalid tenant ID format", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -252,7 +234,7 @@ func (h *TenantHandler) DeleteTenant(c *gin.Context) {
 
 	// Call service
 	if err := h.tenantService.DeleteTenant(c.Request.Context(), id, actorID, actorRole, ipAddress); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("failed to delete tenant", err))
+		errors.BadRequest(c, "failed to delete tenant", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -278,7 +260,7 @@ func (h *TenantHandler) SuspendTenant(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid tenant ID format", err))
+		errors.BadRequest(c, "invalid tenant ID format", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -287,13 +269,7 @@ func (h *TenantHandler) SuspendTenant(c *gin.Context) {
 		Reason string `json:"reason" validate:"required,min=10,max=500"`
 	}
 
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid request body", err))
-		return
-	}
-
-	if err := h.validator.Validate(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.ValidationError(err))
+	if !validator.BindAndValidate(c, &req) {
 		return
 	}
 
@@ -310,7 +286,7 @@ func (h *TenantHandler) SuspendTenant(c *gin.Context) {
 	// Call service
 	tenant, err := h.tenantService.SuspendTenant(c.Request.Context(), id, req.Reason, actorID, actorRole, ipAddress)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("failed to suspend tenant", err))
+		errors.BadRequest(c, "failed to suspend tenant", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -334,7 +310,7 @@ func (h *TenantHandler) ReactivateTenant(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid tenant ID format", err))
+		errors.BadRequest(c, "invalid tenant ID format", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -351,7 +327,7 @@ func (h *TenantHandler) ReactivateTenant(c *gin.Context) {
 	// Call service
 	tenant, err := h.tenantService.ReactivateTenant(c.Request.Context(), id, actorID, actorRole, ipAddress)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("failed to reactivate tenant", err))
+		errors.BadRequest(c, "failed to reactivate tenant", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -375,14 +351,14 @@ func (h *TenantHandler) GetTenantConfiguration(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid tenant ID format", err))
+		errors.BadRequest(c, "invalid tenant ID format", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
 	// Call service
 	config, err := h.tenantService.GetTenantConfiguration(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, errors.NotFound("tenant not found", err))
+		errors.NotFound(c, "tenant not found")
 		return
 	}
 
@@ -410,7 +386,7 @@ func (h *TenantHandler) UpdateTenantConfiguration(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid tenant ID format", err))
+		errors.BadRequest(c, "invalid tenant ID format", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -421,15 +397,9 @@ func (h *TenantHandler) UpdateTenantConfiguration(c *gin.Context) {
 	roleValue, _ := c.Get("role")
 	actorRole, _ := roleValue.(domain.Role)
 
-	// Bind JSON request
-	if err := c.ShouldBindJSON(&config); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid request body", err))
-		return
-	}
-
+	// Bind and validate request
 	// Validate request
-	if err := h.validator.Validate(&config); err != nil {
-		c.JSON(http.StatusBadRequest, errors.ValidationError(err))
+	if !validator.BindAndValidate(c, &config) {
 		return
 	}
 
@@ -439,7 +409,7 @@ func (h *TenantHandler) UpdateTenantConfiguration(c *gin.Context) {
 	// Call service
 	updatedConfig, err := h.tenantService.UpdateTenantConfiguration(c.Request.Context(), id, &config, actorID, actorRole, ipAddress)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("failed to update configuration", err))
+		errors.BadRequest(c, "failed to update configuration", map[string]interface{}{"error": err.Error()})
 		return
 	}
 

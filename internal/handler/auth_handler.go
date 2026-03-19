@@ -15,14 +15,12 @@ import (
 // AuthHandler handles authentication HTTP requests
 type AuthHandler struct {
 	authService *service.AuthService
-	validator   *validator.Validator
 }
 
 // NewAuthHandler creates a new authentication handler
 func NewAuthHandler(authService *service.AuthService) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
-		validator:   validator.New(),
 	}
 }
 
@@ -40,15 +38,7 @@ func NewAuthHandler(authService *service.AuthService) *AuthHandler {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req service.LoginRequest
 
-	// Bind JSON request
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid request body", err))
-		return
-	}
-
-	// Validate request
-	if err := h.validator.Validate(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.ValidationError(err))
+	if !validator.BindAndValidate(c, &req) {
 		return
 	}
 
@@ -58,7 +48,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// Call service
 	response, err := h.authService.Login(c.Request.Context(), &req, ipAddress)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, errors.Unauthorized("authentication failed", err))
+		errors.Unauthorized(c, "authentication failed")
 		return
 	}
 
@@ -79,15 +69,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req service.RegisterRequest
 
-	// Bind JSON request
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid request body", err))
-		return
-	}
-
-	// Validate request
-	if err := h.validator.Validate(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.ValidationError(err))
+	if !validator.BindAndValidate(c, &req) {
 		return
 	}
 
@@ -96,13 +78,13 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	// For public registration, actor is the user being created
 	// In a more restricted flow, this would be called by an ADMIN
-	actorID := uuid.Nil // No actor for public registration
+	actorID := uuid.Nil             // No actor for public registration
 	actorRole := domain.RoleStudent // Default role for self-registration
 
 	// Call service
 	user, err := h.authService.Register(c.Request.Context(), &req, actorID, actorRole, ipAddress)
 	if err != nil {
-		c.JSON(http.StatusConflict, errors.Conflict("registration failed", err))
+		errors.Conflict(c, "CONFLICT", "registration failed", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -122,15 +104,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 func (h *AuthHandler) RequestPasswordReset(c *gin.Context) {
 	var req service.PasswordResetRequest
 
-	// Bind JSON request
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid request body", err))
-		return
-	}
-
-	// Validate request
-	if err := h.validator.Validate(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.ValidationError(err))
+	if !validator.BindAndValidate(c, &req) {
 		return
 	}
 
@@ -157,15 +131,7 @@ func (h *AuthHandler) RequestPasswordReset(c *gin.Context) {
 func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	var req service.ResetPasswordRequest
 
-	// Bind JSON request
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid request body", err))
-		return
-	}
-
-	// Validate request
-	if err := h.validator.Validate(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.ValidationError(err))
+	if !validator.BindAndValidate(c, &req) {
 		return
 	}
 
@@ -174,7 +140,7 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 
 	// Call service
 	if err := h.authService.ResetPassword(c.Request.Context(), &req, ipAddress); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("password reset failed", err))
+		errors.BadRequest(c, "password reset failed", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -197,22 +163,14 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		RefreshToken string `json:"refresh_token" validate:"required"`
 	}
 
-	// Bind JSON request
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid request body", err))
-		return
-	}
-
-	// Validate request
-	if err := h.validator.Validate(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.ValidationError(err))
+	if !validator.BindAndValidate(c, &req) {
 		return
 	}
 
 	// Call service
 	tokenPair, err := h.authService.RefreshToken(c.Request.Context(), req.RefreshToken)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, errors.Unauthorized("token refresh failed", err))
+		errors.Unauthorized(c, "token refresh failed")
 		return
 	}
 
@@ -232,14 +190,14 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 func (h *AuthHandler) ValidateInvitation(c *gin.Context) {
 	token := c.Query("token")
 	if token == "" {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("token is required", nil))
+		errors.BadRequest(c, "token is required", nil)
 		return
 	}
 
 	// Call service
 	user, err := h.authService.ValidateInvitation(c.Request.Context(), token)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invitation validation failed", err))
+		errors.BadRequest(c, "invitation validation failed", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
@@ -259,15 +217,7 @@ func (h *AuthHandler) ValidateInvitation(c *gin.Context) {
 func (h *AuthHandler) AcceptInvitation(c *gin.Context) {
 	var req service.AcceptInvitationRequest
 
-	// Bind JSON request
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invalid request body", err))
-		return
-	}
-
-	// Validate request
-	if err := h.validator.Validate(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errors.ValidationError(err))
+	if !validator.BindAndValidate(c, &req) {
 		return
 	}
 
@@ -277,7 +227,7 @@ func (h *AuthHandler) AcceptInvitation(c *gin.Context) {
 	// Call service
 	user, err := h.authService.AcceptInvitation(c.Request.Context(), &req, ipAddress)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errors.BadRequest("invitation acceptance failed", err))
+		errors.BadRequest(c, "invitation acceptance failed", map[string]interface{}{"error": err.Error()})
 		return
 	}
 

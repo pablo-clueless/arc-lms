@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"arc-lms/internal/domain"
+	"arc-lms/internal/repository/postgres"
 	"arc-lms/internal/repository"
 
 	"github.com/google/uuid"
@@ -13,18 +14,18 @@ import (
 
 // TermService handles term management operations
 type TermService struct {
-	termRepo       repository.TermRepository
-	sessionRepo    repository.SessionRepository
-	enrollmentRepo repository.EnrollmentRepository
+	termRepo       *postgres.TermRepository
+	sessionRepo    *postgres.SessionRepository
+	enrollmentRepo *postgres.EnrollmentRepository
 	auditService   *AuditService
 	billingService *BillingService // For triggering billing on activation
 }
 
 // NewTermService creates a new term service
 func NewTermService(
-	termRepo repository.TermRepository,
-	sessionRepo repository.SessionRepository,
-	enrollmentRepo repository.EnrollmentRepository,
+	termRepo *postgres.TermRepository,
+	sessionRepo *postgres.SessionRepository,
+	enrollmentRepo *postgres.EnrollmentRepository,
 	auditService *AuditService,
 	billingService *BillingService,
 ) *TermService {
@@ -72,7 +73,7 @@ func (s *TermService) CreateTerm(
 	ipAddress string,
 ) (*domain.Term, error) {
 	// Get session to verify it exists and get tenant ID
-	session, err := s.sessionRepo.GetByID(ctx, sessionID)
+	session, err := s.sessionRepo.Get(ctx, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
@@ -83,7 +84,7 @@ func (s *TermService) CreateTerm(
 	}
 
 	// Check if a term with the same ordinal already exists for this session (BR-001)
-	existingTerms, _, err := s.termRepo.ListBySession(ctx, sessionID, nil, repository.PaginationParams{Limit: 100})
+	existingTerms, err := s.termRepo.ListBySession(ctx, sessionID, repository.PaginationParams{Limit: 100})
 	if err != nil {
 		return nil, fmt.Errorf("failed to check existing terms: %w", err)
 	}
@@ -122,7 +123,7 @@ func (s *TermService) CreateTerm(
 		UpdatedAt:            time.Now(),
 	}
 
-	if err := s.termRepo.Create(ctx, term); err != nil {
+	if err := s.termRepo.Create(ctx, term, nil); err != nil {
 		return nil, fmt.Errorf("failed to create term: %w", err)
 	}
 
@@ -145,7 +146,7 @@ func (s *TermService) CreateTerm(
 
 // GetTerm gets a term by ID
 func (s *TermService) GetTerm(ctx context.Context, id uuid.UUID) (*domain.Term, error) {
-	term, err := s.termRepo.GetByID(ctx, id)
+	term, err := s.termRepo.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get term: %w", err)
 	}
@@ -162,7 +163,7 @@ func (s *TermService) UpdateTerm(
 	ipAddress string,
 ) (*domain.Term, error) {
 	// Get existing term
-	term, err := s.termRepo.GetByID(ctx, id)
+	term, err := s.termRepo.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get term: %w", err)
 	}
@@ -199,7 +200,7 @@ func (s *TermService) UpdateTerm(
 	}
 
 	// Validate no overlap with other terms in the session (BR-002)
-	existingTerms, _, err := s.termRepo.ListBySession(ctx, term.SessionID, nil, repository.PaginationParams{Limit: 100})
+	existingTerms, err := s.termRepo.ListBySession(ctx, term.SessionID, repository.PaginationParams{Limit: 100})
 	if err != nil {
 		return nil, fmt.Errorf("failed to check existing terms: %w", err)
 	}
@@ -212,7 +213,7 @@ func (s *TermService) UpdateTerm(
 		}
 	}
 
-	if err := s.termRepo.Update(ctx, term); err != nil {
+	if err := s.termRepo.Update(ctx, term, nil); err != nil {
 		return nil, fmt.Errorf("failed to update term: %w", err)
 	}
 
@@ -242,7 +243,7 @@ func (s *TermService) DeleteTerm(
 	ipAddress string,
 ) error {
 	// Get term for audit
-	term, err := s.termRepo.GetByID(ctx, id)
+	term, err := s.termRepo.Get(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to get term: %w", err)
 	}
@@ -280,7 +281,8 @@ func (s *TermService) ListTerms(
 	sessionID uuid.UUID,
 	filters *TermFilters,
 ) ([]*domain.Term, error) {
-	terms, _, err := s.termRepo.ListBySession(ctx, sessionID, filters, repository.PaginationParams{Limit: 100})
+	// TODO: Apply filters
+	terms, err := s.termRepo.ListBySession(ctx, sessionID, repository.PaginationParams{Limit: 100})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list terms: %w", err)
 	}
@@ -296,7 +298,7 @@ func (s *TermService) ActivateTerm(
 	ipAddress string,
 ) (*domain.Term, error) {
 	// Get term
-	term, err := s.termRepo.GetByID(ctx, id)
+	term, err := s.termRepo.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get term: %w", err)
 	}
@@ -316,7 +318,7 @@ func (s *TermService) ActivateTerm(
 	// Activate term
 	term.Activate()
 
-	if err := s.termRepo.Update(ctx, term); err != nil {
+	if err := s.termRepo.Update(ctx, term, nil); err != nil {
 		return nil, fmt.Errorf("failed to activate term: %w", err)
 	}
 
@@ -361,7 +363,7 @@ func (s *TermService) CompleteTerm(
 	ipAddress string,
 ) (*domain.Term, error) {
 	// Get term
-	term, err := s.termRepo.GetByID(ctx, id)
+	term, err := s.termRepo.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get term: %w", err)
 	}
@@ -376,7 +378,7 @@ func (s *TermService) CompleteTerm(
 	// Complete term
 	term.Complete()
 
-	if err := s.termRepo.Update(ctx, term); err != nil {
+	if err := s.termRepo.Update(ctx, term, nil); err != nil {
 		return nil, fmt.Errorf("failed to complete term: %w", err)
 	}
 
@@ -408,7 +410,7 @@ func (s *TermService) GetActiveTerm(ctx context.Context, sessionID uuid.UUID) (*
 
 // IsInstructionalDay checks if a date is an instructional day
 func (s *TermService) IsInstructionalDay(ctx context.Context, termID uuid.UUID, date time.Time) (bool, error) {
-	term, err := s.termRepo.GetByID(ctx, termID)
+	term, err := s.termRepo.Get(ctx, termID)
 	if err != nil {
 		return false, fmt.Errorf("failed to get term: %w", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"arc-lms/internal/domain"
+	"arc-lms/internal/repository/postgres"
 	"arc-lms/internal/repository"
 
 	"github.com/google/uuid"
@@ -13,11 +14,11 @@ import (
 
 // AuditService handles audit logging operations
 type AuditService struct {
-	auditRepo repository.AuditRepository
+	auditRepo *postgres.AuditRepository
 }
 
 // NewAuditService creates a new audit service
-func NewAuditService(auditRepo repository.AuditRepository) *AuditService {
+func NewAuditService(auditRepo *postgres.AuditRepository) *AuditService {
 	return &AuditService{
 		auditRepo: auditRepo,
 	}

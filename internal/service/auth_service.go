@@ -11,20 +11,21 @@ import (
 	"arc-lms/internal/pkg/crypto"
 	"arc-lms/internal/pkg/jwt"
 	"arc-lms/internal/repository"
+	"arc-lms/internal/repository/postgres"
 
 	"github.com/google/uuid"
 )
 
 // AuthService handles authentication operations
 type AuthService struct {
-	userRepo      repository.UserRepository
-	jwtManager    *jwt.Manager
-	auditService  *AuditService
+	userRepo     *postgres.UserRepository
+	jwtManager   *jwt.Manager
+	auditService *AuditService
 }
 
 // NewAuthService creates a new authentication service
 func NewAuthService(
-	userRepo repository.UserRepository,
+	userRepo *postgres.UserRepository,
 	jwtManager *jwt.Manager,
 	auditService *AuditService,
 ) *AuthService {

@@ -657,3 +657,39 @@ func (r *UserRepository) RecordLogin(ctx context.Context, id uuid.UUID) error {
 
 	return nil
 }
+
+// GetByPasswordResetToken retrieves a user by password reset token
+func (r *UserRepository) GetByPasswordResetToken(ctx context.Context, token string) (*domain.User, error) {
+	query := `
+		SELECT
+			id, tenant_id, role, email, password_hash,
+			first_name, last_name, middle_name, profile_photo, phone,
+			status, permissions, notification_preferences,
+			last_login_at, password_reset_token, password_reset_expiry,
+			invitation_token, invitation_expiry,
+			deactivated_at, deactivation_reason,
+			created_at, updated_at
+		FROM users
+		WHERE password_reset_token = $1
+	`
+
+	return r.scanUser(r.GetDB().QueryRowContext(ctx, query, token))
+}
+
+// GetByInvitationToken retrieves a user by invitation token
+func (r *UserRepository) GetByInvitationToken(ctx context.Context, token string) (*domain.User, error) {
+	query := `
+		SELECT
+			id, tenant_id, role, email, password_hash,
+			first_name, last_name, middle_name, profile_photo, phone,
+			status, permissions, notification_preferences,
+			last_login_at, password_reset_token, password_reset_expiry,
+			invitation_token, invitation_expiry,
+			deactivated_at, deactivation_reason,
+			created_at, updated_at
+		FROM users
+		WHERE invitation_token = $1
+	`
+
+	return r.scanUser(r.GetDB().QueryRowContext(ctx, query, token))
+}
