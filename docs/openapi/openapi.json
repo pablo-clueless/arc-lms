@@ -92,6 +92,10 @@
     {
       "name": "Audit",
       "description": "Audit log access and compliance"
+    },
+    {
+      "name": "Dashboard",
+      "description": "Role-specific dashboard data"
     }
   ],
   "paths": {
@@ -649,6 +653,56 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/dashboard": {
+      "get": {
+        "tags": ["Dashboard"],
+        "summary": "Get dashboard data",
+        "description": "Returns role-specific dashboard data for the authenticated user. SUPER_ADMIN gets platform-wide statistics, ADMIN gets tenant statistics, TUTOR gets their course and student data, and STUDENT gets their enrollment and course data.",
+        "operationId": "getDashboard",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Dashboard data (structure varies by role)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": ["SUPER_ADMIN", "ADMIN", "TUTOR", "STUDENT"],
+                      "example": "ADMIN"
+                    },
+                    "dashboard": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/SuperAdminDashboard"
+                        },
+                        {
+                          "$ref": "#/components/schemas/AdminDashboard"
+                        },
+                        {
+                          "$ref": "#/components/schemas/TutorDashboard"
+                        },
+                        {
+                          "$ref": "#/components/schemas/StudentDashboard"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         }
       }
@@ -2095,6 +2149,198 @@
           "status": {
             "type": "string",
             "enum": ["ACTIVE", "ARCHIVED", "DRAFT"]
+          }
+        }
+      },
+      "SuperAdminDashboard": {
+        "type": "object",
+        "description": "Dashboard data for SUPER_ADMIN role - platform-wide statistics",
+        "properties": {
+          "total_tenants": {
+            "type": "integer",
+            "description": "Total number of tenants (schools) in the system",
+            "example": 25
+          },
+          "active_tenants": {
+            "type": "integer",
+            "description": "Number of active tenants",
+            "example": 23
+          },
+          "suspended_tenants": {
+            "type": "integer",
+            "description": "Number of suspended tenants",
+            "example": 2
+          },
+          "total_users": {
+            "type": "integer",
+            "description": "Total number of users across all tenants",
+            "example": 1250
+          },
+          "users_by_role": {
+            "type": "object",
+            "description": "User count breakdown by role",
+            "properties": {
+              "SUPER_ADMIN": {
+                "type": "integer",
+                "example": 3
+              },
+              "ADMIN": {
+                "type": "integer",
+                "example": 25
+              },
+              "TUTOR": {
+                "type": "integer",
+                "example": 222
+              },
+              "STUDENT": {
+                "type": "integer",
+                "example": 1000
+              }
+            }
+          },
+          "recent_tenants": {
+            "type": "array",
+            "description": "Last 5 recently created tenants",
+            "items": {
+              "$ref": "#/components/schemas/Tenant"
+            }
+          }
+        }
+      },
+      "AdminDashboard": {
+        "type": "object",
+        "description": "Dashboard data for ADMIN role - tenant-wide statistics",
+        "properties": {
+          "tenant_info": {
+            "$ref": "#/components/schemas/Tenant"
+          },
+          "total_users": {
+            "type": "integer",
+            "description": "Total number of users in the tenant",
+            "example": 45
+          },
+          "users_by_role": {
+            "type": "object",
+            "description": "User count breakdown by role",
+            "properties": {
+              "ADMIN": {
+                "type": "integer",
+                "example": 2
+              },
+              "TUTOR": {
+                "type": "integer",
+                "example": 15
+              },
+              "STUDENT": {
+                "type": "integer",
+                "example": 28
+              }
+            }
+          },
+          "total_classes": {
+            "type": "integer",
+            "description": "Total number of classes",
+            "example": 12
+          },
+          "total_courses": {
+            "type": "integer",
+            "description": "Total number of courses",
+            "example": 36
+          },
+          "total_sessions": {
+            "type": "integer",
+            "description": "Total number of sessions",
+            "example": 3
+          },
+          "active_session": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Session"
+              }
+            ],
+            "nullable": true,
+            "description": "Currently active academic session"
+          },
+          "total_enrollments": {
+            "type": "integer",
+            "description": "Total number of student enrollments",
+            "example": 280
+          },
+          "active_enrollments": {
+            "type": "integer",
+            "description": "Number of active enrollments",
+            "example": 275
+          }
+        }
+      },
+      "TutorDashboard": {
+        "type": "object",
+        "description": "Dashboard data for TUTOR role - their courses and students",
+        "properties": {
+          "total_courses": {
+            "type": "integer",
+            "description": "Number of courses assigned to the tutor",
+            "example": 5
+          },
+          "courses": {
+            "type": "array",
+            "description": "List of courses assigned to the tutor",
+            "items": {
+              "$ref": "#/components/schemas/Course"
+            }
+          },
+          "total_students": {
+            "type": "integer",
+            "description": "Total number of unique students in tutor's classes",
+            "example": 45
+          },
+          "active_session": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Session"
+              }
+            ],
+            "nullable": true,
+            "description": "Currently active academic session"
+          }
+        }
+      },
+      "StudentDashboard": {
+        "type": "object",
+        "description": "Dashboard data for STUDENT role - their enrollments and courses",
+        "properties": {
+          "total_enrollments": {
+            "type": "integer",
+            "description": "Number of enrollments",
+            "example": 2
+          },
+          "enrollments": {
+            "type": "array",
+            "description": "List of student's enrollments",
+            "items": {
+              "$ref": "#/components/schemas/Enrollment"
+            }
+          },
+          "total_courses": {
+            "type": "integer",
+            "description": "Number of courses student is enrolled in",
+            "example": 12
+          },
+          "courses": {
+            "type": "array",
+            "description": "List of courses for enrolled classes",
+            "items": {
+              "$ref": "#/components/schemas/Course"
+            }
+          },
+          "active_session": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Session"
+              }
+            ],
+            "nullable": true,
+            "description": "Currently active academic session"
           }
         }
       }

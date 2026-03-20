@@ -52,6 +52,9 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 	router.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler,
 		ginSwagger.URL("/api/v1/openapi.json"),
 	))
+	router.GET("/docs/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler,
+		ginSwagger.URL("/api/v1/openapi.json"),
+	))
 	router.StaticFile("/api/v1/openapi.json", "./docs/openapi/openapi.json")
 
 	router.GET("/redoc", func(c *gin.Context) {
@@ -95,6 +98,7 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 	classService := service.NewClassService(classRepo, sessionRepo, auditService)
 	courseService := service.NewCourseService(courseRepo, classRepo, userRepo, auditService)
 	enrollmentService := service.NewEnrollmentService(enrollmentRepo, classRepo, userRepo, sessionRepo, auditService)
+	dashboardService := service.NewDashboardService(tenantRepo, userRepo, sessionRepo, classRepo, courseRepo, enrollmentRepo)
 
 	authHandler := handler.NewAuthHandler(authService)
 	userHandler := handler.NewUserHandler(userService)
@@ -104,6 +108,7 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 	classHandler := handler.NewClassHandler(classService)
 	courseHandler := handler.NewCourseHandler(courseService)
 	enrollmentHandler := handler.NewEnrollmentHandler(enrollmentService)
+	dashboardHandler := handler.NewDashboardHandler(dashboardService)
 
 	v1 := router.Group("/api/v1")
 	{
@@ -133,6 +138,9 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 		protected.Use(middleware.IdempotencyMiddleware(idempotencyStore))
 
 		{
+			// Dashboard endpoint (all authenticated users)
+			protected.GET("/dashboard", dashboardHandler.GetDashboard)
+
 			tenants := protected.Group("/tenants")
 			{
 				tenants.GET("", tenantHandler.ListTenants)
