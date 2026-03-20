@@ -693,3 +693,56 @@ func (r *UserRepository) GetByInvitationToken(ctx context.Context, token string)
 
 	return r.scanUser(r.GetDB().QueryRowContext(ctx, query, token))
 }
+
+// UserGrowthPoint represents user count at a specific date
+type UserGrowthPoint struct {
+	Date  time.Time `json:"date"`
+	Count int       `json:"count"`
+}
+
+// GetUserGrowth returns user registration counts grouped by date for the last N days
+func (r *UserRepository) GetUserGrowth(ctx context.Context, days int) ([]UserGrowthPoint, error) {
+	query := `
+		SELECT
+			DATE(created_at) as date,
+			COUNT(*) as count
+		FROM users
+		WHERE created_at >= NOW() - INTERVAL '1 day' * $1
+		GROUP BY DATE(created_at)
+		ORDER BY date ASC
+	`
+
+	rows, err := r.GetDB().QueryContext(ctx, query, days)
+	if err != nil {
+		return nil, repository.ParseError(err)
+	}
+	defer rows.Close()
+
+	var growth []UserGrowthPoint
+	for rows.Next() {
+		var point UserGrowthPoint
+		if err := rows.Scan(&point.Date, &point.Count); err != nil {
+			return nil, repository.ParseError(err)
+		}
+		growth = append(growth, point)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, repository.ParseError(err)
+	}
+
+	return growth, nil
+}
+
+// GetTotalUserCount returns the total number of users in the system
+func (r *UserRepository) GetTotalUserCount(ctx context.Context) (int, error) {
+	query := `SELECT COUNT(*) FROM users`
+
+	var count int
+	err := r.GetDB().QueryRowContext(ctx, query).Scan(&count)
+	if err != nil {
+		return 0, repository.ParseError(err)
+	}
+
+	return count, nil
+}

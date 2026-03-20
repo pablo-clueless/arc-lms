@@ -55,11 +55,14 @@ const (
 	AuditActionEnrollmentReactivated AuditAction = "ENROLLMENT_REACTIVATED"
 
 	// Timetable actions
-	AuditActionTimetableGenerated AuditAction = "TIMETABLE_GENERATED"
-	AuditActionTimetablePublished AuditAction = "TIMETABLE_PUBLISHED"
+	AuditActionTimetableGenerated  AuditAction = "TIMETABLE_GENERATED"
+	AuditActionTimetablePublished  AuditAction = "TIMETABLE_PUBLISHED"
+	AuditActionTimetableArchived   AuditAction = "TIMETABLE_ARCHIVED"
 	AuditActionPeriodSwapRequested AuditAction = "PERIOD_SWAP_REQUESTED"
 	AuditActionPeriodSwapApproved  AuditAction = "PERIOD_SWAP_APPROVED"
 	AuditActionPeriodSwapRejected  AuditAction = "PERIOD_SWAP_REJECTED"
+	AuditActionPeriodSwapEscalated AuditAction = "PERIOD_SWAP_ESCALATED"
+	AuditActionPeriodSwapCancelled AuditAction = "PERIOD_SWAP_CANCELLED"
 
 	// Assessment actions
 	AuditActionQuizCreated       AuditAction = "QUIZ_CREATED"
@@ -72,11 +75,19 @@ const (
 	AuditActionAssignmentGraded    AuditAction = "ASSIGNMENT_GRADED"
 
 	// Examination actions
-	AuditActionExaminationCreated  AuditAction = "EXAMINATION_CREATED"
-	AuditActionExaminationScheduled AuditAction = "EXAMINATION_SCHEDULED"
-	AuditActionExaminationSubmitted AuditAction = "EXAMINATION_SUBMITTED"
-	AuditActionExaminationGraded    AuditAction = "EXAMINATION_GRADED"
-	AuditActionResultsPublished     AuditAction = "RESULTS_PUBLISHED"
+	AuditActionExaminationCreated          AuditAction = "EXAMINATION_CREATED"
+	AuditActionExaminationUpdated          AuditAction = "EXAMINATION_UPDATED"
+	AuditActionExaminationDeleted          AuditAction = "EXAMINATION_DELETED"
+	AuditActionExaminationScheduled        AuditAction = "EXAMINATION_SCHEDULED"
+	AuditActionExaminationSubmitted        AuditAction = "EXAMINATION_SUBMITTED"
+	AuditActionExaminationGraded           AuditAction = "EXAMINATION_GRADED"
+	AuditActionExaminationResultsPublished AuditAction = "EXAMINATION_RESULTS_PUBLISHED"
+	AuditActionResultsPublished            AuditAction = "RESULTS_PUBLISHED"
+
+	// Progress actions
+	AuditActionProgressUpdated      AuditAction = "PROGRESS_UPDATED"
+	AuditActionReportCardGenerated  AuditAction = "REPORT_CARD_GENERATED"
+	AuditActionAttendanceMarked     AuditAction = "ATTENDANCE_MARKED"
 
 	// Meeting actions
 	AuditActionMeetingScheduled AuditAction = "MEETING_SCHEDULED"
@@ -92,6 +103,8 @@ const (
 
 	// Communication actions
 	AuditActionEmailSent         AuditAction = "EMAIL_SENT"
+	AuditActionEmailScheduled    AuditAction = "EMAIL_SCHEDULED"
+	AuditActionEmailCancelled    AuditAction = "EMAIL_CANCELLED"
 	AuditActionNotificationSent  AuditAction = "NOTIFICATION_SENT"
 )
 
@@ -108,10 +121,13 @@ const (
 	AuditResourceEnrollment   AuditResourceType = "ENROLLMENT"
 	AuditResourceTimetable    AuditResourceType = "TIMETABLE"
 	AuditResourcePeriod       AuditResourceType = "PERIOD"
+	AuditResourceSwapRequest  AuditResourceType = "SWAP_REQUEST"
 	AuditResourceQuiz         AuditResourceType = "QUIZ"
 	AuditResourceAssignment   AuditResourceType = "ASSIGNMENT"
 	AuditResourceExamination  AuditResourceType = "EXAMINATION"
 	AuditResourceProgress     AuditResourceType = "PROGRESS"
+	AuditResourceReportCard   AuditResourceType = "REPORT_CARD"
+	AuditResourceAttendance   AuditResourceType = "ATTENDANCE"
 	AuditResourceMeeting      AuditResourceType = "MEETING"
 	AuditResourceInvoice      AuditResourceType = "INVOICE"
 	AuditResourceSubscription AuditResourceType = "SUBSCRIPTION"
@@ -249,4 +265,17 @@ func (a *AuditLog) WithResourceName(name string) *AuditLog {
 func (a *AuditLog) WithUserAgent(userAgent string) *AuditLog {
 	a.UserAgent = &userAgent
 	return a
+}
+
+// AuditFilters represents filters for querying audit logs
+type AuditFilters struct {
+	TenantID     *uuid.UUID        `json:"tenant_id,omitempty"`
+	ActorUserID  *uuid.UUID        `json:"actor_user_id,omitempty"`
+	ActorRole    *Role             `json:"actor_role,omitempty"`
+	Action       *AuditAction      `json:"action,omitempty"`
+	ResourceType *AuditResourceType `json:"resource_type,omitempty"`
+	ResourceID   *uuid.UUID        `json:"resource_id,omitempty"`
+	IsSensitive  *bool             `json:"is_sensitive,omitempty"`
+	StartDate    *time.Time        `json:"start_date,omitempty"`
+	EndDate      *time.Time        `json:"end_date,omitempty"`
 }

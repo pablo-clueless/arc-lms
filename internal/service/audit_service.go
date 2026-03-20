@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"arc-lms/internal/domain"
-	"arc-lms/internal/repository/postgres"
 	"arc-lms/internal/repository"
+	"arc-lms/internal/repository/postgres"
 
 	"github.com/google/uuid"
 )
@@ -24,18 +24,6 @@ func NewAuditService(auditRepo *postgres.AuditRepository) *AuditService {
 	}
 }
 
-// AuditFilters represents filters for querying audit logs
-type AuditFilters struct {
-	TenantID     *uuid.UUID                `json:"tenant_id,omitempty"`
-	ActorUserID  *uuid.UUID                `json:"actor_user_id,omitempty"`
-	ActorRole    *domain.Role              `json:"actor_role,omitempty"`
-	Action       *domain.AuditAction       `json:"action,omitempty"`
-	ResourceType *domain.AuditResourceType `json:"resource_type,omitempty"`
-	ResourceID   *uuid.UUID                `json:"resource_id,omitempty"`
-	IsSensitive  *bool                     `json:"is_sensitive,omitempty"`
-	StartDate    *time.Time                `json:"start_date,omitempty"`
-	EndDate      *time.Time                `json:"end_date,omitempty"`
-}
 
 // LogAction creates an audit log entry
 func (s *AuditService) LogAction(
@@ -150,7 +138,7 @@ func (s *AuditService) LogActionWithMetadata(
 // GetAuditLogs queries audit logs with filters and pagination
 func (s *AuditService) GetAuditLogs(
 	ctx context.Context,
-	filters *AuditFilters,
+	filters *domain.AuditFilters,
 	params repository.PaginationParams,
 ) ([]*domain.AuditLog, *repository.PaginatedResult, error) {
 	logs, pagination, err := s.auditRepo.List(ctx, filters, params)
@@ -187,12 +175,12 @@ func (s *AuditService) GetResourceAuditTrail(
 func (s *AuditService) GetTenantAuditLogs(
 	ctx context.Context,
 	tenantID uuid.UUID,
-	filters *AuditFilters,
+	filters *domain.AuditFilters,
 	params repository.PaginationParams,
 ) ([]*domain.AuditLog, *repository.PaginatedResult, error) {
 	// Override tenant ID in filters
 	if filters == nil {
-		filters = &AuditFilters{}
+		filters = &domain.AuditFilters{}
 	}
 	filters.TenantID = &tenantID
 
@@ -209,7 +197,7 @@ func (s *AuditService) GetUserAuditLogs(
 	userID uuid.UUID,
 	params repository.PaginationParams,
 ) ([]*domain.AuditLog, *repository.PaginatedResult, error) {
-	filters := &AuditFilters{
+	filters := &domain.AuditFilters{
 		ActorUserID: &userID,
 	}
 
@@ -223,12 +211,12 @@ func (s *AuditService) GetUserAuditLogs(
 // GetSensitiveAuditLogs gets all sensitive audit logs (SUPER_ADMIN only)
 func (s *AuditService) GetSensitiveAuditLogs(
 	ctx context.Context,
-	filters *AuditFilters,
+	filters *domain.AuditFilters,
 	params repository.PaginationParams,
 ) ([]*domain.AuditLog, *repository.PaginatedResult, error) {
 	// Override is_sensitive in filters
 	if filters == nil {
-		filters = &AuditFilters{}
+		filters = &domain.AuditFilters{}
 	}
 	isSensitive := true
 	filters.IsSensitive = &isSensitive
@@ -244,12 +232,12 @@ func (s *AuditService) GetSensitiveAuditLogs(
 func (s *AuditService) GetAuditLogsByDateRange(
 	ctx context.Context,
 	startDate, endDate time.Time,
-	filters *AuditFilters,
+	filters *domain.AuditFilters,
 	params repository.PaginationParams,
 ) ([]*domain.AuditLog, *repository.PaginatedResult, error) {
 	// Override date range in filters
 	if filters == nil {
-		filters = &AuditFilters{}
+		filters = &domain.AuditFilters{}
 	}
 	filters.StartDate = &startDate
 	filters.EndDate = &endDate

@@ -330,7 +330,7 @@ func (s *TermService) ActivateTerm(
 		fmt.Printf("failed to count students for billing: %v\n", err)
 	} else if s.billingService != nil {
 		// Generate invoice for this term
-		_, err = s.billingService.GenerateTermInvoice(ctx, term.TenantID, term.ID, studentCount, actorID, actorRole, ipAddress)
+		_, err = s.billingService.GenerateTermInvoice(ctx, term.TenantID, term.SessionID, term.ID, studentCount, actorID, actorRole, ipAddress)
 		if err != nil {
 			// Log but don't fail
 			fmt.Printf("failed to generate invoice for term %s: %v\n", term.ID, err)

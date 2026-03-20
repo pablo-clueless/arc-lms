@@ -3,7 +3,6 @@ package router
 import (
 	"database/sql"
 	"net/http"
-	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -15,6 +14,7 @@ import (
 	"arc-lms/internal/middleware"
 	"arc-lms/internal/pkg/idempotency"
 	"arc-lms/internal/pkg/jwt"
+	customLogger "arc-lms/internal/pkg/logger"
 	"arc-lms/internal/repository/postgres"
 	"arc-lms/internal/service"
 )
@@ -34,9 +34,8 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 
 	router := gin.New()
 
-	logger := logrus.New()
-	logger.SetOutput(os.Stdout)
-	logger.SetFormatter(&logrus.JSONFormatter{})
+	var logger *logrus.Logger
+	logger = customLogger.NewColoredLogger()
 
 	router.Use(middleware.RecoveryMiddleware(logger))
 	router.Use(middleware.LoggerMiddleware(logger))
@@ -50,9 +49,6 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 	})
 
 	router.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler,
-		ginSwagger.URL("/api/v1/openapi.json"),
-	))
-	router.GET("/docs/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler,
 		ginSwagger.URL("/api/v1/openapi.json"),
 	))
 	router.StaticFile("/api/v1/openapi.json", "./docs/openapi/openapi.json")
@@ -86,10 +82,21 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 	courseRepo := postgres.NewCourseRepository(cfg.DB)
 	enrollmentRepo := postgres.NewEnrollmentRepository(cfg.DB)
 	timetableRepo := postgres.NewTimetableRepository(cfg.DB)
+	periodRepo := postgres.NewPeriodRepository(cfg.DB)
+	swapRequestRepo := postgres.NewSwapRequestRepository(cfg.DB)
 	auditRepo := postgres.NewAuditRepository(cfg.DB)
+	notificationRepo := postgres.NewNotificationRepository(cfg.DB)
+	quizRepo := postgres.NewQuizRepository(cfg.DB)
+	assignmentRepo := postgres.NewAssignmentRepository(cfg.DB)
+	invoiceRepo := postgres.NewInvoiceRepository(cfg.DB)
+	examinationRepo := postgres.NewExaminationRepository(cfg.DB)
+	progressRepo := postgres.NewProgressRepository(cfg.DB)
+	meetingRepo := postgres.NewMeetingRepository(cfg.DB)
+	communicationRepo := postgres.NewCommunicationRepository(cfg.DB)
+	subscriptionRepo := postgres.NewSubscriptionRepository(cfg.DB)
 
 	auditService := service.NewAuditService(auditRepo)
-	billingService := service.NewBillingService(nil, nil, nil, auditService) // TODO: Implement billing/invoice repository
+	billingService := service.NewBillingService(invoiceRepo, subscriptionRepo, tenantRepo, enrollmentRepo, auditService)
 	authService := service.NewAuthService(userRepo, cfg.JWTManager, auditService)
 	userService := service.NewUserService(userRepo, auditService)
 	tenantService := service.NewTenantService(tenantRepo, userRepo, auditService)
@@ -98,7 +105,47 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 	classService := service.NewClassService(classRepo, sessionRepo, auditService)
 	courseService := service.NewCourseService(courseRepo, classRepo, userRepo, auditService)
 	enrollmentService := service.NewEnrollmentService(enrollmentRepo, classRepo, userRepo, sessionRepo, auditService)
-	dashboardService := service.NewDashboardService(tenantRepo, userRepo, sessionRepo, classRepo, courseRepo, enrollmentRepo)
+	dashboardService := service.NewDashboardService(tenantRepo, userRepo, sessionRepo, classRepo, courseRepo, enrollmentRepo, invoiceRepo)
+	notificationService := service.NewNotificationService(notificationRepo, userRepo)
+	assessmentService := service.NewAssessmentService(quizRepo, assignmentRepo, courseRepo, auditService)
+	timetableService := service.NewTimetableService(
+		cfg.DB,
+		timetableRepo,
+		periodRepo,
+		swapRequestRepo,
+		courseRepo,
+		classRepo,
+		termRepo,
+		tenantRepo,
+		auditService,
+	)
+	examinationService := service.NewExaminationService(examinationRepo, courseRepo, auditService)
+	progressService := service.NewProgressService(
+		progressRepo,
+		enrollmentRepo,
+		courseRepo,
+		classRepo,
+		termRepo,
+		quizRepo,
+		assignmentRepo,
+		examinationRepo,
+		auditService,
+	)
+	meetingService := service.NewMeetingService(
+		meetingRepo,
+		classRepo,
+		courseRepo,
+		enrollmentRepo,
+		notificationService,
+		auditService,
+	)
+	communicationService := service.NewCommunicationService(
+		communicationRepo,
+		userRepo,
+		classRepo,
+		courseRepo,
+		auditService,
+	)
 
 	authHandler := handler.NewAuthHandler(authService)
 	userHandler := handler.NewUserHandler(userService)
@@ -109,6 +156,15 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 	courseHandler := handler.NewCourseHandler(courseService)
 	enrollmentHandler := handler.NewEnrollmentHandler(enrollmentService)
 	dashboardHandler := handler.NewDashboardHandler(dashboardService)
+	auditHandler := handler.NewAuditHandler(auditService)
+	notificationHandler := handler.NewNotificationHandler(notificationService)
+	assessmentHandler := handler.NewAssessmentHandler(assessmentService)
+	timetableHandler := handler.NewTimetableHandler(timetableService)
+	examinationHandler := handler.NewExaminationHandler(examinationService)
+	progressHandler := handler.NewProgressHandler(progressService)
+	meetingHandler := handler.NewMeetingHandler(meetingService)
+	communicationHandler := handler.NewCommunicationHandler(communicationService)
+	billingHandler := handler.NewBillingHandler(billingService)
 
 	v1 := router.Group("/api/v1")
 	{
@@ -138,7 +194,7 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 		protected.Use(middleware.IdempotencyMiddleware(idempotencyStore))
 
 		{
-			// Dashboard endpoint (all authenticated users)
+
 			protected.GET("/dashboard", dashboardHandler.GetDashboard)
 
 			tenants := protected.Group("/tenants")
@@ -165,6 +221,16 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				users.PUT("/:id", userHandler.UpdateUser)
 				users.POST("/:id/deactivate", userHandler.DeactivateUser)
 				users.POST("/:id/reactivate", userHandler.ReactivateUser)
+			}
+
+			// SuperAdmin management routes (SUPER_ADMIN only)
+			superadmins := protected.Group("/superadmins")
+			{
+				superadmins.GET("", userHandler.ListSuperAdmins)
+				superadmins.POST("", userHandler.CreateSuperAdmin)
+				superadmins.GET("/:id", userHandler.GetSuperAdmin)
+				superadmins.PUT("/:id", userHandler.UpdateSuperAdmin)
+				superadmins.DELETE("/:id", userHandler.DeleteSuperAdmin)
 			}
 
 			sessions := protected.Group("/sessions")
@@ -208,6 +274,33 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				courses.PUT("/:id", courseHandler.UpdateCourse)
 				courses.DELETE("/:id", courseHandler.DeleteCourse)
 				courses.POST("/:id/reassign-tutor", courseHandler.ReassignTutor)
+
+				quizzes := courses.Group("/:id/quizzes")
+				{
+					quizzes.GET("", assessmentHandler.ListQuizzes)
+					quizzes.POST("", assessmentHandler.CreateQuiz)
+					quizzes.GET("/:id", assessmentHandler.GetQuiz)
+					quizzes.PUT("/:id", assessmentHandler.UpdateQuiz)
+					quizzes.DELETE("/:id", assessmentHandler.DeleteQuiz)
+					quizzes.POST("/:id/publish", assessmentHandler.PublishQuiz)
+					quizzes.POST("/:id/start", assessmentHandler.StartQuiz)
+					quizzes.POST("/:id/submit", assessmentHandler.SubmitQuiz)
+					quizzes.GET("/:id/submissions", assessmentHandler.ListQuizSubmissions)
+					quizzes.POST("/:id/submissions/:submission_id/grade", assessmentHandler.GradeQuiz)
+				}
+
+				assignments := courses.Group("/:id/assignments")
+				{
+					assignments.GET("", assessmentHandler.ListAssignments)
+					assignments.POST("", assessmentHandler.CreateAssignment)
+					assignments.GET("/:id", assessmentHandler.GetAssignment)
+					assignments.PUT("/:id", assessmentHandler.UpdateAssignment)
+					assignments.DELETE("/:id", assessmentHandler.DeleteAssignment)
+					assignments.POST("/:id/publish", assessmentHandler.PublishAssignment)
+					assignments.POST("/:id/submit", assessmentHandler.SubmitAssignment)
+					assignments.GET("/:id/submissions", assessmentHandler.ListAssignmentSubmissions)
+					assignments.POST("/:id/submissions/:submission_id/grade", assessmentHandler.GradeAssignment)
+				}
 			}
 
 			enrollments := protected.Group("/enrollments")
@@ -221,111 +314,172 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				enrollments.POST("/:id/reactivate", enrollmentHandler.ReactivateEnrollment)
 			}
 
-			// Timetable routes (placeholders for now)
 			timetables := protected.Group("/timetables")
 			{
-				timetables.GET("", placeholderHandler("List timetables"))
-				timetables.POST("/generate", placeholderHandler("Generate timetable"))
-				timetables.GET("/:id", placeholderHandler("Get timetable"))
-				timetables.POST("/:id/publish", placeholderHandler("Publish timetable"))
-			}
+				timetables.GET("", timetableHandler.ListTimetables)
+				timetables.POST("/generate", timetableHandler.GenerateTimetable)
+				timetables.POST("/regenerate", timetableHandler.RegenerateTimetable)
+				timetables.GET("/tutor/:tutor_id", timetableHandler.GetTutorTimetable)
+				timetables.GET("/class/:class_id", timetableHandler.GetClassTimetable)
+				timetables.GET("/:id", timetableHandler.GetTimetable)
+				timetables.POST("/:id/publish", timetableHandler.PublishTimetable)
 
-			// Assessment routes (placeholders for now)
-			assessments := protected.Group("/assessments")
-			{
-				quizzes := assessments.Group("/quizzes")
+				// Swap request routes
+				swapRequests := timetables.Group("/swap-requests")
 				{
-					quizzes.GET("", placeholderHandler("List quizzes"))
-					quizzes.POST("", placeholderHandler("Create quiz"))
-					quizzes.GET("/:id", placeholderHandler("Get quiz"))
-					quizzes.PUT("/:id", placeholderHandler("Update quiz"))
-					quizzes.DELETE("/:id", placeholderHandler("Delete quiz"))
-					quizzes.POST("/:id/submit", placeholderHandler("Submit quiz"))
-					quizzes.POST("/:id/grade", placeholderHandler("Grade quiz"))
-				}
-
-				assignments := assessments.Group("/assignments")
-				{
-					assignments.GET("", placeholderHandler("List assignments"))
-					assignments.POST("", placeholderHandler("Create assignment"))
-					assignments.GET("/:id", placeholderHandler("Get assignment"))
-					assignments.PUT("/:id", placeholderHandler("Update assignment"))
-					assignments.DELETE("/:id", placeholderHandler("Delete assignment"))
-					assignments.POST("/:id/submit", placeholderHandler("Submit assignment"))
-					assignments.POST("/:id/grade", placeholderHandler("Grade assignment"))
+					swapRequests.GET("", timetableHandler.ListSwapRequests)
+					swapRequests.POST("", timetableHandler.CreateSwapRequest)
+					swapRequests.GET("/pending", timetableHandler.ListPendingSwapRequests)
+					swapRequests.GET("/escalated", timetableHandler.ListEscalatedSwapRequests)
+					swapRequests.GET("/:id", timetableHandler.GetSwapRequest)
+					swapRequests.POST("/:id/approve", timetableHandler.ApproveSwapRequest)
+					swapRequests.POST("/:id/reject", timetableHandler.RejectSwapRequest)
+					swapRequests.POST("/:id/escalate", timetableHandler.EscalateSwapRequest)
+					swapRequests.POST("/:id/override", timetableHandler.AdminOverrideSwapRequest)
+					swapRequests.POST("/:id/cancel", timetableHandler.CancelSwapRequest)
 				}
 			}
 
-			// Examination routes (placeholders)
 			examinations := protected.Group("/examinations")
 			{
-				examinations.GET("", placeholderHandler("List examinations"))
-				examinations.POST("", placeholderHandler("Create examination"))
-				examinations.GET("/:id", placeholderHandler("Get examination"))
-				examinations.PUT("/:id", placeholderHandler("Update examination"))
-				examinations.DELETE("/:id", placeholderHandler("Delete examination"))
-				examinations.POST("/:id/start", placeholderHandler("Start examination"))
-				examinations.POST("/:id/submit", placeholderHandler("Submit examination"))
-				examinations.POST("/:id/publish-results", placeholderHandler("Publish results"))
+				examinations.GET("", examinationHandler.ListExaminations)
+				examinations.POST("", examinationHandler.CreateExamination)
+				examinations.GET("/:id", examinationHandler.GetExamination)
+				examinations.PUT("/:id", examinationHandler.UpdateExamination)
+				examinations.DELETE("/:id", examinationHandler.DeleteExamination)
+				examinations.POST("/:id/schedule", examinationHandler.ScheduleExamination)
+				examinations.POST("/:id/start", examinationHandler.StartExamination)
+				examinations.GET("/:id/my-submission", examinationHandler.GetMySubmission)
+				examinations.GET("/:id/stats", examinationHandler.GetExaminationStats)
+				examinations.POST("/:id/publish-results", examinationHandler.PublishResults)
+
+				// Submission routes
+				examinations.GET("/:id/submissions", examinationHandler.ListSubmissions)
+				examinations.GET("/:id/submissions/pending-grading", examinationHandler.GetPendingGradingSubmissions)
+				examinations.GET("/:id/submissions/:submission_id", examinationHandler.GetSubmission)
+				examinations.POST("/:id/submissions/:submission_id/answers", examinationHandler.SaveAnswer)
+				examinations.POST("/:id/submissions/:submission_id/integrity-events", examinationHandler.RecordIntegrityEvent)
+				examinations.POST("/:id/submissions/:submission_id/submit", examinationHandler.SubmitExamination)
+				examinations.POST("/:id/submissions/:submission_id/grade", examinationHandler.GradeSubmission)
 			}
 
-			// Progress routes (placeholders)
 			progress := protected.Group("/progress")
 			{
-				progress.GET("/students/:student_id", placeholderHandler("Get student progress"))
-				progress.GET("/courses/:course_id", placeholderHandler("Get course progress"))
-				progress.GET("/report-cards/:student_id", placeholderHandler("Get report card"))
+				// Progress records
+				progress.GET("/:id", progressHandler.GetProgress)
+				progress.GET("/students/:student_id", progressHandler.GetStudentProgress)
+				progress.GET("/courses/:course_id", progressHandler.GetCourseProgress)
+				progress.GET("/classes/:class_id", progressHandler.GetClassProgress)
+				progress.GET("/flagged", progressHandler.ListFlaggedStudents)
+
+				// Grade computation
+				progress.POST("/courses/:course_id/compute-grades", progressHandler.ComputeGrades)
+				progress.POST("/classes/:class_id/compute-positions", progressHandler.ComputeClassPositions)
+
+				// Attendance
+				progress.POST("/courses/:course_id/attendance", progressHandler.MarkAttendance)
+
+				// Remarks
+				progress.POST("/:id/tutor-remarks", progressHandler.AddTutorRemarks)
+				progress.POST("/:id/principal-remarks", progressHandler.AddPrincipalRemarks)
+				progress.POST("/:id/unflag", progressHandler.UnflagProgress)
+
+				// Statistics
+				progress.GET("/courses/:course_id/statistics", progressHandler.GetCourseStatistics)
+				progress.GET("/classes/:class_id/statistics", progressHandler.GetClassStatistics)
+
+				// Report Cards
+				reportCards := progress.Group("/report-cards")
+				{
+					reportCards.GET("/:id", progressHandler.GetReportCard)
+					reportCards.PUT("/:id/remarks", progressHandler.UpdateReportCardRemarks)
+					reportCards.GET("/students/:student_id", progressHandler.GetStudentReportCard)
+					reportCards.POST("/students/:student_id", progressHandler.GenerateReportCard)
+					reportCards.POST("/classes/:class_id", progressHandler.GenerateClassReportCards)
+				}
 			}
 
-			// Meeting routes (placeholders)
 			meetings := protected.Group("/meetings")
 			{
-				meetings.GET("", placeholderHandler("List meetings"))
-				meetings.POST("", placeholderHandler("Schedule meeting"))
-				meetings.GET("/:id", placeholderHandler("Get meeting"))
-				meetings.PUT("/:id", placeholderHandler("Update meeting"))
-				meetings.POST("/:id/start", placeholderHandler("Start meeting"))
-				meetings.POST("/:id/end", placeholderHandler("End meeting"))
-				meetings.POST("/:id/cancel", placeholderHandler("Cancel meeting"))
+				meetings.GET("", meetingHandler.ListMeetings)
+				meetings.POST("", meetingHandler.ScheduleMeeting)
+				meetings.GET("/upcoming", meetingHandler.ListUpcomingMeetings)
+				meetings.GET("/live", meetingHandler.ListLiveMeetings)
+				meetings.GET("/statistics", meetingHandler.GetMeetingStatistics)
+				meetings.GET("/class/:class_id", meetingHandler.ListMeetingsByClass)
+				meetings.GET("/:id", meetingHandler.GetMeeting)
+				meetings.PUT("/:id", meetingHandler.UpdateMeeting)
+				meetings.POST("/:id/start", meetingHandler.StartMeeting)
+				meetings.POST("/:id/end", meetingHandler.EndMeeting)
+				meetings.POST("/:id/cancel", meetingHandler.CancelMeeting)
+				meetings.GET("/:id/join", meetingHandler.JoinMeeting)
+				meetings.POST("/:id/participants/join", meetingHandler.RecordParticipantJoin)
+				meetings.POST("/:id/participants/leave", meetingHandler.RecordParticipantLeave)
+				meetings.POST("/:id/recording", meetingHandler.AddRecording)
 			}
 
-			// Communication routes (placeholders)
 			communications := protected.Group("/communications")
 			{
-				communications.POST("/emails", placeholderHandler("Send email"))
-				communications.GET("/emails", placeholderHandler("List emails"))
-				communications.GET("/emails/:id", placeholderHandler("Get email"))
+				// Email routes
+				communications.GET("/emails", communicationHandler.ListEmails)
+				communications.POST("/emails", communicationHandler.ComposeEmail)
+				communications.GET("/emails/statistics", communicationHandler.GetEmailStatistics)
+				communications.GET("/emails/search", communicationHandler.SearchEmails)
+				communications.POST("/emails/preview-recipients", communicationHandler.PreviewRecipients)
+				communications.POST("/emails/co-tutors", communicationHandler.SendToCoTutors)
+				communications.GET("/emails/:id", communicationHandler.GetEmail)
+				communications.DELETE("/emails/:id", communicationHandler.DeleteEmail)
+				communications.POST("/emails/:id/schedule", communicationHandler.ScheduleEmail)
+				communications.POST("/emails/:id/send", communicationHandler.SendEmailNow)
+				communications.POST("/emails/:id/cancel", communicationHandler.CancelEmail)
 			}
 
-			// Notification routes (placeholders)
 			notifications := protected.Group("/notifications")
 			{
-				notifications.GET("", placeholderHandler("List notifications"))
-				notifications.GET("/:id", placeholderHandler("Get notification"))
-				notifications.POST("/:id/read", placeholderHandler("Mark as read"))
-				notifications.POST("/mark-all-read", placeholderHandler("Mark all as read"))
+				notifications.GET("", notificationHandler.ListNotifications)
+				notifications.GET("/unread-count", notificationHandler.GetUnreadCount)
+				notifications.POST("/mark-all-read", notificationHandler.MarkAllAsRead)
+				notifications.GET("/:id", notificationHandler.GetNotification)
+				notifications.POST("/:id/read", notificationHandler.MarkAsRead)
+				notifications.DELETE("/:id", notificationHandler.DeleteNotification)
 			}
 
-			// Billing routes (placeholders)
 			billing := protected.Group("/billing")
 			{
-				billing.GET("/subscriptions", placeholderHandler("List subscriptions"))
-				billing.GET("/invoices", placeholderHandler("List invoices"))
-				billing.GET("/invoices/:id", placeholderHandler("Get invoice"))
-				billing.POST("/invoices/:id/pay", placeholderHandler("Mark invoice as paid"))
+				// Invoice routes
+				billing.GET("/invoices", billingHandler.ListInvoices)
+				billing.GET("/invoices/upcoming", billingHandler.GetUpcomingInvoices)
+				billing.GET("/invoices/overdue", billingHandler.GetOverdueInvoices)
+				billing.GET("/invoices/:id", billingHandler.GetInvoice)
+				billing.POST("/invoices/:id/pay", billingHandler.MarkInvoiceAsPaid)
+				billing.POST("/invoices/:id/dispute", billingHandler.DisputeInvoice)
+				billing.POST("/invoices/:id/void", billingHandler.VoidInvoice)
+
+				// Billing adjustment routes
+				billing.GET("/adjustments", billingHandler.ListBillingAdjustments)
+				billing.POST("/adjustments", billingHandler.ApplyBillingAdjustment)
+
+				// Subscription routes
+				billing.GET("/subscriptions", billingHandler.ListSubscriptions)
+				billing.GET("/subscriptions/stats", billingHandler.GetSubscriptionStatistics)
+				billing.GET("/subscriptions/tenant", billingHandler.GetTenantSubscription)
+				billing.GET("/subscriptions/:id", billingHandler.GetSubscription)
+				billing.POST("/subscriptions/:id/cancel", billingHandler.CancelSubscription)
+				billing.POST("/subscriptions/:id/reactivate", billingHandler.ReactivateSubscription)
+
+				// Statistics and metrics
+				billing.GET("/metrics", billingHandler.GetBillingMetrics)
+				billing.GET("/stats", billingHandler.GetTenantBillingStats)
 			}
 
-			// Audit routes (placeholders)
 			audit := protected.Group("/audit")
 			{
-				audit.GET("/logs", placeholderHandler("List audit logs"))
-				audit.GET("/logs/:id", placeholderHandler("Get audit log"))
+				audit.GET("/logs", auditHandler.ListAuditLogs)
+				audit.GET("/logs/resource", auditHandler.GetResourceAuditTrail)
+				audit.GET("/logs/:id", auditHandler.GetAuditLog)
 			}
 		}
 	}
-
-	// Suppress unused variable warnings
-	_ = timetableRepo
 
 	return router
 }

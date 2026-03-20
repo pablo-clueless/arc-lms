@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"time"
 
+	"arc-lms/internal/pkg/metrics"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -76,6 +78,10 @@ func LoggerMiddleware(logger *logrus.Logger) gin.HandlerFunc {
 		// Calculate latency
 		latency := time.Since(startTime)
 		statusCode := c.Writer.Status()
+
+		// Record metrics
+		isError := statusCode >= 400
+		metrics.GetCollector().RecordRequest(latency.Milliseconds(), isError)
 
 		// Build log fields
 		fields := logrus.Fields{

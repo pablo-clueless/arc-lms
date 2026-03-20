@@ -17,6 +17,7 @@ import (
 	"arc-lms/internal/config"
 	"arc-lms/internal/pkg/jwt"
 	"arc-lms/internal/router"
+	"arc-lms/internal/scheduler"
 	"arc-lms/internal/seed"
 )
 
@@ -77,6 +78,13 @@ func main() {
 	})
 
 	log.Println("✅ Router configured")
+
+	// Initialize and start background job scheduler
+	jobScheduler := scheduler.SetupScheduler(db, nil)
+	jobScheduler.Start()
+	defer jobScheduler.Stop()
+
+	log.Println("📅 Background job scheduler started")
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Server.Port,

@@ -54,11 +54,13 @@ func (h *DashboardHandler) GetDashboard(c *gin.Context) {
 		return
 	}
 
-	role, ok := roleValue.(domain.Role)
+	// Role is stored as string in JWT claims
+	roleStr, ok := roleValue.(string)
 	if !ok {
 		errors.BadRequest(c, "invalid role format", nil)
 		return
 	}
+	role := domain.Role(roleStr)
 
 	// Get tenant ID from context (optional for SUPER_ADMIN)
 	var tenantID *uuid.UUID

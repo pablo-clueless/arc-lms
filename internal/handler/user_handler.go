@@ -471,3 +471,226 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Password changed successfully"})
 }
+
+// CreateSuperAdmin godoc
+// @Summary Create a new SuperAdmin
+// @Description Create a new SuperAdmin user (SUPER_ADMIN only)
+// @Tags SuperAdmin
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body service.CreateSuperAdminRequest true "SuperAdmin data"
+// @Success 201 {object} domain.User
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 403 {object} errors.ErrorResponse
+// @Failure 409 {object} errors.ErrorResponse
+// @Router /superadmins [post]
+func (h *UserHandler) CreateSuperAdmin(c *gin.Context) {
+	var req service.CreateSuperAdminRequest
+
+	// Get actor details
+	actorIDValue, _ := c.Get("user_id")
+	actorID, _ := actorIDValue.(uuid.UUID)
+
+	roleValue, _ := c.Get("role")
+	actorRole, _ := roleValue.(domain.Role)
+
+	// Only SUPER_ADMIN can create SuperAdmins
+	if actorRole != domain.RoleSuperAdmin {
+		errors.Forbidden(c, "only SuperAdmins can create other SuperAdmins")
+		return
+	}
+
+	if !validator.BindAndValidate(c, &req) {
+		return
+	}
+
+	ipAddress := c.ClientIP()
+
+	user, err := h.userService.CreateSuperAdmin(c.Request.Context(), &req, actorID, actorRole, ipAddress)
+	if err != nil {
+		if err == repository.ErrDuplicateKey {
+			errors.Conflict(c, "CONFLICT", "SuperAdmin with this email already exists", nil)
+			return
+		}
+		errors.BadRequest(c, "failed to create SuperAdmin", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, user)
+}
+
+// ListSuperAdmins godoc
+// @Summary List all SuperAdmins
+// @Description List all SuperAdmin users (SUPER_ADMIN only)
+// @Tags SuperAdmin
+// @Security BearerAuth
+// @Produce json
+// @Param limit query int false "Items per page" default(20)
+// @Param cursor query string false "Pagination cursor"
+// @Success 200 {object} map[string]interface{}
+// @Failure 403 {object} errors.ErrorResponse
+// @Router /superadmins [get]
+func (h *UserHandler) ListSuperAdmins(c *gin.Context) {
+	roleValue, _ := c.Get("role")
+	actorRole, _ := roleValue.(domain.Role)
+
+	// Only SUPER_ADMIN can list SuperAdmins
+	if actorRole != domain.RoleSuperAdmin {
+		errors.Forbidden(c, "only SuperAdmins can list other SuperAdmins")
+		return
+	}
+
+	params := repository.PaginationParams{
+		Limit:     20,
+		SortOrder: "DESC",
+	}
+
+	users, pagination, err := h.userService.ListSuperAdmins(c.Request.Context(), actorRole, params)
+	if err != nil {
+		errors.BadRequest(c, "failed to list SuperAdmins", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"users":      users,
+		"pagination": pagination,
+	})
+}
+
+// GetSuperAdmin godoc
+// @Summary Get SuperAdmin by ID
+// @Description Get SuperAdmin details by ID (SUPER_ADMIN only)
+// @Tags SuperAdmin
+// @Security BearerAuth
+// @Produce json
+// @Param id path string true "SuperAdmin ID"
+// @Success 200 {object} domain.User
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 403 {object} errors.ErrorResponse
+// @Failure 404 {object} errors.ErrorResponse
+// @Router /superadmins/{id} [get]
+func (h *UserHandler) GetSuperAdmin(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := uuid.Parse(idParam)
+	if err != nil {
+		errors.BadRequest(c, "invalid SuperAdmin ID format", nil)
+		return
+	}
+
+	roleValue, _ := c.Get("role")
+	actorRole, _ := roleValue.(domain.Role)
+
+	// Only SUPER_ADMIN can view SuperAdmins
+	if actorRole != domain.RoleSuperAdmin {
+		errors.Forbidden(c, "only SuperAdmins can view other SuperAdmins")
+		return
+	}
+
+	user, err := h.userService.GetUser(c.Request.Context(), id)
+	if err != nil {
+		errors.NotFound(c, "SuperAdmin not found")
+		return
+	}
+
+	// Verify the user is a SUPER_ADMIN
+	if user.Role != domain.RoleSuperAdmin {
+		errors.NotFound(c, "SuperAdmin not found")
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
+}
+
+// UpdateSuperAdmin godoc
+// @Summary Update SuperAdmin
+// @Description Update SuperAdmin profile (SUPER_ADMIN only)
+// @Tags SuperAdmin
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path string true "SuperAdmin ID"
+// @Param request body service.UpdateUserRequest true "Update data"
+// @Success 200 {object} domain.User
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 403 {object} errors.ErrorResponse
+// @Failure 404 {object} errors.ErrorResponse
+// @Router /superadmins/{id} [put]
+func (h *UserHandler) UpdateSuperAdmin(c *gin.Context) {
+	var req service.UpdateUserRequest
+
+	idParam := c.Param("id")
+	id, err := uuid.Parse(idParam)
+	if err != nil {
+		errors.BadRequest(c, "invalid SuperAdmin ID format", nil)
+		return
+	}
+
+	actorIDValue, _ := c.Get("user_id")
+	actorID, _ := actorIDValue.(uuid.UUID)
+
+	roleValue, _ := c.Get("role")
+	actorRole, _ := roleValue.(domain.Role)
+
+	// Only SUPER_ADMIN can update SuperAdmins
+	if actorRole != domain.RoleSuperAdmin {
+		errors.Forbidden(c, "only SuperAdmins can update other SuperAdmins")
+		return
+	}
+
+	if !validator.BindAndValidate(c, &req) {
+		return
+	}
+
+	ipAddress := c.ClientIP()
+
+	user, err := h.userService.UpdateSuperAdmin(c.Request.Context(), id, &req, actorID, actorRole, ipAddress)
+	if err != nil {
+		errors.BadRequest(c, "failed to update SuperAdmin", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
+}
+
+// DeleteSuperAdmin godoc
+// @Summary Delete SuperAdmin
+// @Description Delete a SuperAdmin user (SUPER_ADMIN only)
+// @Tags SuperAdmin
+// @Security BearerAuth
+// @Produce json
+// @Param id path string true "SuperAdmin ID"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 403 {object} errors.ErrorResponse
+// @Failure 404 {object} errors.ErrorResponse
+// @Router /superadmins/{id} [delete]
+func (h *UserHandler) DeleteSuperAdmin(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := uuid.Parse(idParam)
+	if err != nil {
+		errors.BadRequest(c, "invalid SuperAdmin ID format", nil)
+		return
+	}
+
+	actorIDValue, _ := c.Get("user_id")
+	actorID, _ := actorIDValue.(uuid.UUID)
+
+	roleValue, _ := c.Get("role")
+	actorRole, _ := roleValue.(domain.Role)
+
+	// Only SUPER_ADMIN can delete SuperAdmins
+	if actorRole != domain.RoleSuperAdmin {
+		errors.Forbidden(c, "only SuperAdmins can delete other SuperAdmins")
+		return
+	}
+
+	ipAddress := c.ClientIP()
+
+	if err := h.userService.DeleteSuperAdmin(c.Request.Context(), id, actorID, actorRole, ipAddress); err != nil {
+		errors.BadRequest(c, "failed to delete SuperAdmin", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "SuperAdmin deleted successfully"})
+}

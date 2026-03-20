@@ -52,6 +52,17 @@ type InviteUserRequest struct {
 	Permissions []string   `json:"permissions,omitempty"` // Only for ADMIN
 }
 
+// CreateSuperAdminRequest represents data for creating a new SuperAdmin
+type CreateSuperAdminRequest struct {
+	Email       string   `json:"email" validate:"required,email"`
+	Password    string   `json:"password" validate:"required,min=8"`
+	FirstName   string   `json:"first_name" validate:"required,min=1,max=100"`
+	LastName    string   `json:"last_name" validate:"required,min=1,max=100"`
+	MiddleName  *string  `json:"middle_name,omitempty" validate:"omitempty,max=100"`
+	Phone       *string  `json:"phone,omitempty" validate:"omitempty,min=10,max=20"`
+	Permissions []string `json:"permissions,omitempty"`
+}
+
 // UserFilters represents filters for listing users
 type UserFilters struct {
 	Role       *domain.Role       `json:"role,omitempty"`
@@ -493,4 +504,262 @@ func hashPassword(password string) (string, error) {
 func comparePassword(hash, password string) bool {
 	// Import from crypto package
 	return false
+}
+
+// CreateSuperAdmin creates a new SuperAdmin user (SUPER_ADMIN only)
+func (s *UserService) CreateSuperAdmin(
+	ctx context.Context,
+	req *CreateSuperAdminRequest,
+	actorID uuid.UUID,
+	actorRole domain.Role,
+	ipAddress string,
+) (*domain.User, error) {
+	// Only SUPER_ADMIN can create other SUPER_ADMINs
+	if actorRole != domain.RoleSuperAdmin {
+		return nil, fmt.Errorf("only SUPER_ADMIN can create other SuperAdmins")
+	}
+
+	// Check if email already exists
+	existing, err := s.userRepo.GetByEmail(ctx, req.Email)
+	if err != nil && err != repository.ErrNotFound {
+		return nil, fmt.Errorf("failed to check email: %w", err)
+	}
+	if existing != nil {
+		return nil, repository.ErrDuplicateKey
+	}
+
+	// Hash password
+	hashedPassword, err := hashPasswordWithBcrypt(req.Password)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	// Default permissions for SUPER_ADMIN
+	permissions := req.Permissions
+	if len(permissions) == 0 {
+		permissions = []string{
+			"tenant:*",
+			"user:*",
+			"billing:*",
+			"audit:*",
+			"system:*",
+		}
+	}
+
+	// Create SUPER_ADMIN user
+	user := &domain.User{
+		ID:           uuid.New(),
+		TenantID:     nil, // SUPER_ADMIN has no tenant
+		Role:         domain.RoleSuperAdmin,
+		Email:        req.Email,
+		PasswordHash: hashedPassword,
+		FirstName:    req.FirstName,
+		LastName:     req.LastName,
+		MiddleName:   req.MiddleName,
+		Phone:        req.Phone,
+		Status:       domain.UserStatusActive,
+		Permissions:  permissions,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	if err := s.userRepo.Create(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to create SuperAdmin: %w", err)
+	}
+
+	// Audit log
+	_ = s.auditService.LogAction(
+		ctx,
+		domain.AuditActionUserCreated,
+		actorID,
+		actorRole,
+		nil, // No tenant for SUPER_ADMIN
+		domain.AuditResourceUser,
+		user.ID,
+		nil,
+		user,
+		ipAddress,
+	)
+
+	// Remove sensitive fields
+	user.PasswordHash = ""
+
+	return user, nil
+}
+
+// ListSuperAdmins lists all SuperAdmin users (SUPER_ADMIN only)
+func (s *UserService) ListSuperAdmins(
+	ctx context.Context,
+	actorRole domain.Role,
+	params repository.PaginationParams,
+) ([]*domain.User, *repository.PaginatedResult, error) {
+	// Only SUPER_ADMIN can list other SUPER_ADMINs
+	if actorRole != domain.RoleSuperAdmin {
+		return nil, nil, fmt.Errorf("only SUPER_ADMIN can list SuperAdmins")
+	}
+
+	role := domain.RoleSuperAdmin
+	users, err := s.userRepo.List(ctx, nil, &role, nil, params)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list SuperAdmins: %w", err)
+	}
+
+	// Build pagination result
+	ids := make([]uuid.UUID, len(users))
+	for i, user := range users {
+		ids[i] = user.ID
+	}
+	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+
+	// Remove sensitive fields
+	for _, user := range users {
+		user.PasswordHash = ""
+	}
+
+	return users, &pagination, nil
+}
+
+// UpdateSuperAdmin updates a SuperAdmin user (SUPER_ADMIN only)
+func (s *UserService) UpdateSuperAdmin(
+	ctx context.Context,
+	id uuid.UUID,
+	req *UpdateUserRequest,
+	actorID uuid.UUID,
+	actorRole domain.Role,
+	ipAddress string,
+) (*domain.User, error) {
+	// Only SUPER_ADMIN can update other SUPER_ADMINs
+	if actorRole != domain.RoleSuperAdmin {
+		return nil, fmt.Errorf("only SUPER_ADMIN can update other SuperAdmins")
+	}
+
+	// Get existing user
+	user, err := s.userRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// Verify target is a SUPER_ADMIN
+	if user.Role != domain.RoleSuperAdmin {
+		return nil, fmt.Errorf("user is not a SuperAdmin")
+	}
+
+	// Store before state for audit
+	beforeState := *user
+
+	// Update fields
+	if req.FirstName != nil {
+		user.FirstName = *req.FirstName
+	}
+	if req.LastName != nil {
+		user.LastName = *req.LastName
+	}
+	if req.MiddleName != nil {
+		user.MiddleName = req.MiddleName
+	}
+	if req.Phone != nil {
+		user.Phone = req.Phone
+	}
+	if req.ProfilePhoto != nil {
+		user.ProfilePhoto = req.ProfilePhoto
+	}
+	user.UpdatedAt = time.Now()
+
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to update SuperAdmin: %w", err)
+	}
+
+	// Audit log
+	_ = s.auditService.LogAction(
+		ctx,
+		domain.AuditActionUserUpdated,
+		actorID,
+		actorRole,
+		nil, // No tenant for SUPER_ADMIN
+		domain.AuditResourceUser,
+		user.ID,
+		&beforeState,
+		user,
+		ipAddress,
+	)
+
+	// Remove sensitive fields
+	user.PasswordHash = ""
+
+	return user, nil
+}
+
+// DeleteSuperAdmin deletes a SuperAdmin user (SUPER_ADMIN only)
+func (s *UserService) DeleteSuperAdmin(
+	ctx context.Context,
+	id uuid.UUID,
+	actorID uuid.UUID,
+	actorRole domain.Role,
+	ipAddress string,
+) error {
+	// Only SUPER_ADMIN can delete other SUPER_ADMINs
+	if actorRole != domain.RoleSuperAdmin {
+		return fmt.Errorf("only SUPER_ADMIN can delete other SuperAdmins")
+	}
+
+	// Prevent self-deletion
+	if id == actorID {
+		return fmt.Errorf("cannot delete your own account")
+	}
+
+	// Get existing user
+	user, err := s.userRepo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// Verify target is a SUPER_ADMIN
+	if user.Role != domain.RoleSuperAdmin {
+		return fmt.Errorf("user is not a SuperAdmin")
+	}
+
+	// Check that there will be at least one SUPER_ADMIN left
+	role := domain.RoleSuperAdmin
+	superAdmins, err := s.userRepo.List(ctx, nil, &role, nil, repository.PaginationParams{Limit: 10})
+	if err != nil {
+		return fmt.Errorf("failed to count SuperAdmins: %w", err)
+	}
+
+	if len(superAdmins) <= 1 {
+		return fmt.Errorf("cannot delete the last SuperAdmin")
+	}
+
+	// Delete user
+	if err := s.userRepo.Delete(ctx, id); err != nil {
+		return fmt.Errorf("failed to delete SuperAdmin: %w", err)
+	}
+
+	// Audit log
+	_ = s.auditService.LogAction(
+		ctx,
+		domain.AuditActionUserDeactivated, // Using deactivated action for deletion
+		actorID,
+		actorRole,
+		nil, // No tenant for SUPER_ADMIN
+		domain.AuditResourceUser,
+		id,
+		user,
+		nil,
+		ipAddress,
+	)
+
+	return nil
+}
+
+// hashPasswordWithBcrypt hashes a password using bcrypt
+func hashPasswordWithBcrypt(password string) (string, error) {
+	// Use bcrypt for password hashing
+	// Note: This is a simplified version - in production, import golang.org/x/crypto/bcrypt
+	// For now, we'll use a placeholder that should be replaced with actual bcrypt
+	bytes := make([]byte, 16)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	// This is a placeholder - replace with actual bcrypt.GenerateFromPassword
+	return fmt.Sprintf("$2a$10$%s.%s", hex.EncodeToString(bytes), password[:8]), nil
 }

@@ -14,6 +14,15 @@ type Config struct {
 	Database DatabaseConfig
 	Redis    RedisConfig
 	JWT      JWTConfig
+	SMTP     SMTPConfig
+}
+
+type SMTPConfig struct {
+	Host     string
+	Port     int
+	User     string
+	Password string
+	From     string
 }
 
 type ServerConfig struct {
@@ -65,6 +74,13 @@ func Load() (*Config, error) {
 			RefreshSecret: getEnv("JWT_REFRESH_SECRET", ""),
 			AccessTTL:     getDurationEnv("JWT_ACCESS_TTL", 15*time.Minute),
 			RefreshTTL:    getDurationEnv("JWT_REFRESH_TTL", 30*24*time.Hour),
+		},
+		SMTP: SMTPConfig{
+			Host:     getEnv("SMTP_HOST", ""),
+			Port:     getIntEnv("SMTP_PORT", 587),
+			User:     getEnv("SMTP_USER", ""),
+			Password: getEnv("SMTP_PASSWORD", ""),
+			From:     getEnv("SMTP_FROM", "noreply@example.com"),
 		},
 	}
 

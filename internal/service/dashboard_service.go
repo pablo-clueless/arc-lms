@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"arc-lms/internal/domain"
+	"arc-lms/internal/pkg/metrics"
 	"arc-lms/internal/repository"
 	"arc-lms/internal/repository/postgres"
 
@@ -19,6 +20,7 @@ type DashboardService struct {
 	classRepo      *postgres.ClassRepository
 	courseRepo     *postgres.CourseRepository
 	enrollmentRepo *postgres.EnrollmentRepository
+	invoiceRepo    *postgres.InvoiceRepository
 }
 
 // NewDashboardService creates a new dashboard service
@@ -29,6 +31,7 @@ func NewDashboardService(
 	classRepo *postgres.ClassRepository,
 	courseRepo *postgres.CourseRepository,
 	enrollmentRepo *postgres.EnrollmentRepository,
+	invoiceRepo *postgres.InvoiceRepository,
 ) *DashboardService {
 	return &DashboardService{
 		tenantRepo:     tenantRepo,
@@ -37,17 +40,23 @@ func NewDashboardService(
 		classRepo:      classRepo,
 		courseRepo:     courseRepo,
 		enrollmentRepo: enrollmentRepo,
+		invoiceRepo:    invoiceRepo,
 	}
 }
 
 // SuperAdminDashboard represents dashboard data for SUPER_ADMIN
 type SuperAdminDashboard struct {
-	TotalTenants       int                       `json:"total_tenants"`
-	ActiveTenants      int                       `json:"active_tenants"`
-	SuspendedTenants   int                       `json:"suspended_tenants"`
-	TotalUsers         int                       `json:"total_users"`
-	UsersByRole        map[string]int            `json:"users_by_role"`
-	RecentTenants      []*domain.Tenant          `json:"recent_tenants"`
+	TotalTenants     int                         `json:"total_tenants"`
+	ActiveTenants    int                         `json:"active_tenants"`
+	SuspendedTenants int                         `json:"suspended_tenants"`
+	TotalUsers       int                         `json:"total_users"`
+	UsersByRole      map[string]int              `json:"users_by_role"`
+	RecentTenants    []*domain.Tenant            `json:"recent_tenants"`
+	UserGrowth       []postgres.UserGrowthPoint  `json:"user_growth"`
+	SystemMetrics    *metrics.SystemMetrics      `json:"system_metrics"`
+	DBStats          *repository.DBStats         `json:"db_stats"`
+	// Billing metrics
+	BillingMetrics   *postgres.BillingMetrics    `json:"billing_metrics"`
 }
 
 // AdminDashboard represents dashboard data for ADMIN
@@ -156,6 +165,25 @@ func (s *DashboardService) getSuperAdminDashboard(ctx context.Context) (*SuperAd
 		recentTenants = recentTenants[:5]
 	}
 
+	// Get user growth data (last 30 days)
+	userGrowth, err := s.userRepo.GetUserGrowth(ctx, 30)
+	if err != nil {
+		// Non-critical, continue without growth data
+		userGrowth = []postgres.UserGrowthPoint{}
+	}
+
+	// Get system metrics
+	systemMetrics := metrics.GetCollector().GetMetrics()
+
+	// Get DB stats
+	dbStats := s.userRepo.GetDBStats()
+
+	// Get billing metrics
+	var billingMetrics *postgres.BillingMetrics
+	if s.invoiceRepo != nil {
+		billingMetrics, _ = s.invoiceRepo.GetBillingMetrics(ctx)
+	}
+
 	return &SuperAdminDashboard{
 		TotalTenants:     len(allTenants),
 		ActiveTenants:    activeTenants,
@@ -163,6 +191,10 @@ func (s *DashboardService) getSuperAdminDashboard(ctx context.Context) (*SuperAd
 		TotalUsers:       len(allUsers),
 		UsersByRole:      usersByRole,
 		RecentTenants:    recentTenants,
+		UserGrowth:       userGrowth,
+		SystemMetrics:    systemMetrics,
+		DBStats:          dbStats,
+		BillingMetrics:   billingMetrics,
 	}, nil
 }
 

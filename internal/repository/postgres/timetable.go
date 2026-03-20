@@ -395,3 +395,127 @@ func (r *TimetableRepository) ValidateTenantAccess(ctx context.Context, tenantID
 
 	return nil
 }
+
+// GetByClassAndTerm retrieves a non-archived timetable for a class and term
+func (r *TimetableRepository) GetByClassAndTerm(ctx context.Context, classID uuid.UUID, termID uuid.UUID) (*domain.Timetable, error) {
+	query := `
+		SELECT
+			id, tenant_id, class_id, term_id, status,
+			generated_at, generated_by, published_at, published_by,
+			generation_version, notes, created_at, updated_at, archived_at
+		FROM timetables
+		WHERE class_id = $1 AND term_id = $2 AND status != $3
+		ORDER BY generation_version DESC
+		LIMIT 1
+	`
+
+	var timetable domain.Timetable
+	var publishedAt, archivedAt sql.NullTime
+	var publishedBy sql.NullString
+	var notes sql.NullString
+
+	err := r.GetDB().QueryRowContext(ctx, query, classID, termID, domain.TimetableStatusArchived).Scan(
+		&timetable.ID,
+		&timetable.TenantID,
+		&timetable.ClassID,
+		&timetable.TermID,
+		&timetable.Status,
+		&timetable.GeneratedAt,
+		&timetable.GeneratedBy,
+		&publishedAt,
+		&publishedBy,
+		&timetable.GenerationVersion,
+		&notes,
+		&timetable.CreatedAt,
+		&timetable.UpdatedAt,
+		&archivedAt,
+	)
+
+	if err != nil {
+		return nil, repository.ParseError(err)
+	}
+
+	if publishedAt.Valid {
+		timetable.PublishedAt = &publishedAt.Time
+	}
+	if publishedBy.Valid {
+		pubBy, _ := uuid.Parse(publishedBy.String)
+		timetable.PublishedBy = &pubBy
+	}
+	if archivedAt.Valid {
+		timetable.ArchivedAt = &archivedAt.Time
+	}
+	timetable.Notes = repository.FromNullString(notes)
+
+	return &timetable, nil
+}
+
+// Archive archives a timetable
+func (r *TimetableRepository) Archive(ctx context.Context, id uuid.UUID, tx *sql.Tx) error {
+	query := `
+		UPDATE timetables
+		SET
+			status = $2,
+			archived_at = $3,
+			updated_at = $4
+		WHERE id = $1
+	`
+
+	now := time.Now()
+	execer := repository.GetExecer(r.GetDB(), tx)
+	result, err := execer.ExecContext(ctx, query,
+		id,
+		domain.TimetableStatusArchived,
+		now,
+		now,
+	)
+
+	if err != nil {
+		return repository.ParseError(err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return repository.ErrNotFound
+	}
+
+	return nil
+}
+
+// ListByTenant retrieves timetables for a tenant with pagination
+func (r *TimetableRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, params repository.PaginationParams) ([]*domain.Timetable, error) {
+	if err := repository.ValidatePaginationParams(&params); err != nil {
+		return nil, err
+	}
+
+	query := `
+		SELECT
+			id, tenant_id, class_id, term_id, status,
+			generated_at, generated_by, published_at, published_by,
+			generation_version, notes, created_at, updated_at, archived_at
+		FROM timetables
+		WHERE tenant_id = $1 AND status != $2
+	`
+
+	args := []interface{}{tenantID, domain.TimetableStatusArchived}
+	argIndex := 3
+
+	if params.Cursor != nil {
+		if params.SortOrder == "DESC" {
+			query += fmt.Sprintf(" AND id < $%d", argIndex)
+		} else {
+			query += fmt.Sprintf(" AND id > $%d", argIndex)
+		}
+		args = append(args, *params.Cursor)
+		argIndex++
+	}
+
+	query += fmt.Sprintf(" ORDER BY id %s LIMIT $%d", params.SortOrder, argIndex)
+	args = append(args, params.Limit+1)
+
+	return r.queryTimetables(ctx, query, args...)
+}

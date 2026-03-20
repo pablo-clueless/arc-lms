@@ -129,6 +129,29 @@ func (r *BaseRepository) GetDB() *sql.DB {
 	return r.db
 }
 
+// DBStats represents database connection pool statistics
+type DBStats struct {
+	MaxOpenConnections int   `json:"max_open_connections"`
+	OpenConnections    int   `json:"open_connections"`
+	InUse              int   `json:"in_use"`
+	Idle               int   `json:"idle"`
+	WaitCount          int64 `json:"wait_count"`
+	WaitDurationMs     int64 `json:"wait_duration_ms"`
+}
+
+// GetDBStats returns database connection pool statistics
+func (r *BaseRepository) GetDBStats() *DBStats {
+	stats := r.db.Stats()
+	return &DBStats{
+		MaxOpenConnections: stats.MaxOpenConnections,
+		OpenConnections:    stats.OpenConnections,
+		InUse:              stats.InUse,
+		Idle:               stats.Idle,
+		WaitCount:          stats.WaitCount,
+		WaitDurationMs:     stats.WaitDuration.Milliseconds(),
+	}
+}
+
 // Execer defines the interface for database execution (works with both *sql.DB and *sql.Tx)
 type Execer interface {
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)

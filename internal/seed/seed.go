@@ -93,6 +93,13 @@ func SeedAll(db *sql.DB) error {
 		return fmt.Errorf("failed to seed superadmin: %w", err)
 	}
 
+	// Seed sample school (only in development)
+	if os.Getenv("SEED_SAMPLE_SCHOOL") == "true" {
+		if err := SeedSampleSchool(db, DefaultSampleSchoolConfig()); err != nil {
+			return fmt.Errorf("failed to seed sample school: %w", err)
+		}
+	}
+
 	log.Println("✅ Database seeding completed")
 	return nil
 }
