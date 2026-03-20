@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Arc LMS API",
-    "description": "Multi-tenant Learning Management System API for Nigerian primary and secondary schools. Provides comprehensive academic management including sessions, terms, classes, courses, assessments, examinations, timetabling, meetings, communications, billing, and audit trails.\n\n## Features\n- Multi-tenant architecture with complete data isolation\n- Role-based access control (SUPER_ADMIN, ADMIN, TUTOR, STUDENT)\n- Automatic timetable generation with conflict resolution\n- Nigerian academic calendar support (3 terms per session)\n- Postpaid billing model (NGN 500 per student per term)\n- Real-time notifications and communications\n- Comprehensive audit logging\n- Examination integrity tracking\n- Progress tracking and report card generation\n\n## Authentication\nAll endpoints (except public auth routes) require Bearer JWT authentication via the `Authorization` header:\n```\nAuthorization: Bearer <access_token>\n```\n\n## Rate Limiting\n- Default: 1,000 requests/minute per tenant\n- SUPER_ADMIN: 2,000 requests/minute\n- Burst: 2x sustained rate for 30 seconds\n\n## Idempotency\nAll mutating operations (POST, PUT, PATCH) support the `Idempotency-Key` header to prevent duplicate operations.",
+    "description": "Multi-tenant Learning Management System API for Nigerian primary and secondary schools. Provides comprehensive academic management including sessions, terms, classes, courses, assessments, examinations, timetabling, meetings, communications, billing, and audit trails.\n\n## Features\n- Multi-tenant architecture with complete data isolation\n- Role-based access control (SUPER_ADMIN, ADMIN, TUTOR, STUDENT)\n- Automatic timetable generation with conflict resolution\n- Nigerian academic calendar support (3 terms per session)\n- Postpaid billing model (NGN 500 per student per term)\n- Real-time notifications via WebSocket\n- Email communications via Brevo SMTP\n- Comprehensive audit logging\n- Examination integrity tracking\n- Progress tracking and report card generation\n\n## Authentication\nAll endpoints (except public auth routes) require Bearer JWT authentication via the `Authorization` header:\n```\nAuthorization: Bearer <access_token>\n```\n\n## WebSocket Connection\nFor real-time notifications, connect to the WebSocket endpoint:\n```\nws://host/ws?token=<access_token>\n```\n\nMessages are sent in JSON format:\n```json\n{\n  \"type\": \"NOTIFICATION\",\n  \"payload\": { /* notification object */ }\n}\n```\n\n## Rate Limiting\n- Default: 1,000 requests/minute per tenant\n- SUPER_ADMIN: 2,000 requests/minute\n- Burst: 2x sustained rate for 30 seconds\n\n## Idempotency\nAll mutating operations (POST, PUT, PATCH) support the `Idempotency-Key` header to prevent duplicate operations.",
     "version": "1.0.0",
     "contact": {
       "name": "Arc LMS Support",
@@ -58,6 +58,10 @@
       "description": "Course (subject) management and tutor assignments"
     },
     {
+      "name": "Enrollments",
+      "description": "Student enrollment management"
+    },
+    {
       "name": "Timetables",
       "description": "Automatic timetable generation and period management"
     },
@@ -84,6 +88,10 @@
     {
       "name": "Notifications",
       "description": "In-app and push notifications"
+    },
+    {
+      "name": "WebSocket",
+      "description": "Real-time WebSocket connections for instant notifications"
     },
     {
       "name": "Billing",
@@ -1334,6 +1342,1261 @@
           }
         }
       }
+    },
+    "/sessions/{id}/terms": {
+      "get": {
+        "tags": ["Terms"],
+        "summary": "List terms in a session",
+        "description": "Get all terms within a specific academic session",
+        "operationId": "listTerms",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Session UUID",
+            "schema": {"type": "string", "format": "uuid"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Terms retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {"$ref": "#/components/schemas/Term"}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "post": {
+        "tags": ["Terms"],
+        "summary": "Create a new term",
+        "description": "Create a new term within a session. ADMIN only.",
+        "operationId": "createTerm",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Session UUID",
+            "schema": {"type": "string", "format": "uuid"}
+          },
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/CreateTermRequest"}
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Term created successfully",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Term"}
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/sessions/{id}/terms/{term_id}": {
+      "get": {
+        "tags": ["Terms"],
+        "summary": "Get term by ID",
+        "operationId": "getTerm",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}},
+          {"name": "term_id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Term retrieved",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Term"}}}
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "put": {
+        "tags": ["Terms"],
+        "summary": "Update term",
+        "operationId": "updateTerm",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}},
+          {"name": "term_id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}},
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UpdateTermRequest"}}}
+        },
+        "responses": {
+          "200": {"description": "Term updated", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Term"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "delete": {
+        "tags": ["Terms"],
+        "summary": "Delete term",
+        "operationId": "deleteTerm",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}},
+          {"name": "term_id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}
+        ],
+        "responses": {
+          "204": {"description": "Term deleted"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/sessions/{id}/terms/{term_id}/activate": {
+      "post": {
+        "tags": ["Terms"],
+        "summary": "Activate term",
+        "operationId": "activateTerm",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}},
+          {"name": "term_id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}},
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "responses": {
+          "200": {"description": "Term activated", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Term"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "409": {"$ref": "#/components/responses/Conflict"}
+        }
+      }
+    },
+    "/classes": {
+      "get": {
+        "tags": ["Classes"],
+        "summary": "List classes",
+        "operationId": "listClasses",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"$ref": "#/components/parameters/Page"},
+          {"$ref": "#/components/parameters/Limit"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Classes retrieved",
+            "content": {"application/json": {"schema": {"type": "object", "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Class"}}, "pagination": {"$ref": "#/components/schemas/PaginatedResult"}}}}}
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      },
+      "post": {
+        "tags": ["Classes"],
+        "summary": "Create class",
+        "operationId": "createClass",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CreateClassRequest"}}}},
+        "responses": {
+          "201": {"description": "Class created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Class"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/classes/{id}": {
+      "get": {
+        "tags": ["Classes"],
+        "summary": "Get class by ID",
+        "operationId": "getClass",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Class retrieved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Class"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "put": {
+        "tags": ["Classes"],
+        "summary": "Update class",
+        "operationId": "updateClass",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UpdateClassRequest"}}}},
+        "responses": {
+          "200": {"description": "Class updated", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Class"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "delete": {
+        "tags": ["Classes"],
+        "summary": "Delete class",
+        "operationId": "deleteClass",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "204": {"description": "Class deleted"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/courses": {
+      "get": {
+        "tags": ["Courses"],
+        "summary": "List courses",
+        "operationId": "listCourses",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"$ref": "#/components/parameters/Page"},
+          {"$ref": "#/components/parameters/Limit"},
+          {"name": "class_id", "in": "query", "schema": {"type": "string", "format": "uuid"}}
+        ],
+        "responses": {
+          "200": {"description": "Courses retrieved", "content": {"application/json": {"schema": {"type": "object", "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Course"}}, "pagination": {"$ref": "#/components/schemas/PaginatedResult"}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      },
+      "post": {
+        "tags": ["Courses"],
+        "summary": "Create course",
+        "operationId": "createCourse",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CreateCourseRequest"}}}},
+        "responses": {
+          "201": {"description": "Course created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Course"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/courses/{id}": {
+      "get": {
+        "tags": ["Courses"],
+        "summary": "Get course by ID",
+        "operationId": "getCourse",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Course retrieved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Course"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "put": {
+        "tags": ["Courses"],
+        "summary": "Update course",
+        "operationId": "updateCourse",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UpdateCourseRequest"}}}},
+        "responses": {
+          "200": {"description": "Course updated", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Course"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "delete": {
+        "tags": ["Courses"],
+        "summary": "Delete course",
+        "operationId": "deleteCourse",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "204": {"description": "Course deleted"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/courses/{id}/quizzes": {
+      "get": {
+        "tags": ["Assessments"],
+        "summary": "List quizzes for a course",
+        "operationId": "listQuizzes",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Quizzes retrieved", "content": {"application/json": {"schema": {"type": "object", "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Quiz"}}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      },
+      "post": {
+        "tags": ["Assessments"],
+        "summary": "Create quiz",
+        "operationId": "createQuiz",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CreateQuizRequest"}}}},
+        "responses": {
+          "201": {"description": "Quiz created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Quiz"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/courses/{id}/assignments": {
+      "get": {
+        "tags": ["Assessments"],
+        "summary": "List assignments for a course",
+        "operationId": "listAssignments",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Assignments retrieved", "content": {"application/json": {"schema": {"type": "object", "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Assignment"}}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      },
+      "post": {
+        "tags": ["Assessments"],
+        "summary": "Create assignment",
+        "operationId": "createAssignment",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CreateAssignmentRequest"}}}},
+        "responses": {
+          "201": {"description": "Assignment created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Assignment"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/enrollments": {
+      "get": {
+        "tags": ["Enrollments"],
+        "summary": "List enrollments",
+        "operationId": "listEnrollments",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"$ref": "#/components/parameters/Page"},
+          {"$ref": "#/components/parameters/Limit"},
+          {"name": "class_id", "in": "query", "schema": {"type": "string", "format": "uuid"}},
+          {"name": "student_id", "in": "query", "schema": {"type": "string", "format": "uuid"}}
+        ],
+        "responses": {
+          "200": {"description": "Enrollments retrieved", "content": {"application/json": {"schema": {"type": "object", "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Enrollment"}}, "pagination": {"$ref": "#/components/schemas/PaginatedResult"}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      },
+      "post": {
+        "tags": ["Enrollments"],
+        "summary": "Enroll student",
+        "operationId": "enrollStudent",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/EnrollStudentRequest"}}}},
+        "responses": {
+          "201": {"description": "Student enrolled", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Enrollment"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/enrollments/{id}": {
+      "get": {
+        "tags": ["Enrollments"],
+        "summary": "Get enrollment by ID",
+        "operationId": "getEnrollment",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Enrollment retrieved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Enrollment"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/enrollments/{id}/transfer": {
+      "post": {
+        "tags": ["Enrollments"],
+        "summary": "Transfer student to another class",
+        "operationId": "transferStudent",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "properties": {"target_class_id": {"type": "string", "format": "uuid"}}}}}},
+        "responses": {
+          "200": {"description": "Student transferred", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Enrollment"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/timetables": {
+      "get": {
+        "tags": ["Timetables"],
+        "summary": "List timetables",
+        "operationId": "listTimetables",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "class_id", "in": "query", "schema": {"type": "string", "format": "uuid"}}, {"name": "term_id", "in": "query", "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Timetables retrieved", "content": {"application/json": {"schema": {"type": "object", "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Timetable"}}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/timetables/generate": {
+      "post": {
+        "tags": ["Timetables"],
+        "summary": "Generate timetable",
+        "operationId": "generateTimetable",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/GenerateTimetableRequest"}}}},
+        "responses": {
+          "201": {"description": "Timetable generated", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Timetable"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/timetables/{id}": {
+      "get": {
+        "tags": ["Timetables"],
+        "summary": "Get timetable by ID",
+        "operationId": "getTimetable",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Timetable retrieved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Timetable"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/timetables/{id}/publish": {
+      "post": {
+        "tags": ["Timetables"],
+        "summary": "Publish timetable",
+        "operationId": "publishTimetable",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/IdempotencyKey"}],
+        "responses": {
+          "200": {"description": "Timetable published", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Timetable"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/timetables/swap-requests": {
+      "get": {
+        "tags": ["Timetables"],
+        "summary": "List swap requests",
+        "operationId": "listSwapRequests",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {"description": "Swap requests retrieved", "content": {"application/json": {"schema": {"type": "object", "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/SwapRequest"}}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      },
+      "post": {
+        "tags": ["Timetables"],
+        "summary": "Create swap request",
+        "operationId": "createSwapRequest",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CreateSwapRequestRequest"}}}},
+        "responses": {
+          "201": {"description": "Swap request created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SwapRequest"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/examinations": {
+      "get": {
+        "tags": ["Examinations"],
+        "summary": "List examinations",
+        "operationId": "listExaminations",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "course_id", "in": "query", "schema": {"type": "string", "format": "uuid"}}, {"name": "status", "in": "query", "schema": {"type": "string", "enum": ["DRAFT", "SCHEDULED", "IN_PROGRESS", "COMPLETED", "GRADED"]}}],
+        "responses": {
+          "200": {"description": "Examinations retrieved", "content": {"application/json": {"schema": {"type": "object", "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Examination"}}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      },
+      "post": {
+        "tags": ["Examinations"],
+        "summary": "Create examination",
+        "operationId": "createExamination",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CreateExaminationRequest"}}}},
+        "responses": {
+          "201": {"description": "Examination created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Examination"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/examinations/{id}": {
+      "get": {
+        "tags": ["Examinations"],
+        "summary": "Get examination by ID",
+        "operationId": "getExamination",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Examination retrieved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Examination"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "put": {
+        "tags": ["Examinations"],
+        "summary": "Update examination",
+        "operationId": "updateExamination",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UpdateExaminationRequest"}}}},
+        "responses": {
+          "200": {"description": "Examination updated", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Examination"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      },
+      "delete": {
+        "tags": ["Examinations"],
+        "summary": "Delete examination",
+        "operationId": "deleteExamination",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "204": {"description": "Examination deleted"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/examinations/{id}/schedule": {
+      "post": {
+        "tags": ["Examinations"],
+        "summary": "Schedule examination",
+        "operationId": "scheduleExamination",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "properties": {"window_start": {"type": "string", "format": "date-time"}, "window_end": {"type": "string", "format": "date-time"}}}}}},
+        "responses": {
+          "200": {"description": "Examination scheduled", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Examination"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/examinations/{id}/submissions": {
+      "get": {
+        "tags": ["Examinations"],
+        "summary": "List examination submissions",
+        "operationId": "listExaminationSubmissions",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Submissions retrieved", "content": {"application/json": {"schema": {"type": "object", "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/ExaminationSubmission"}}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/progress/{id}": {
+      "get": {
+        "tags": ["Progress"],
+        "summary": "Get progress record by ID",
+        "operationId": "getProgress",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Progress retrieved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Progress"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/progress/students/{student_id}": {
+      "get": {
+        "tags": ["Progress"],
+        "summary": "Get student progress",
+        "operationId": "getStudentProgress",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "student_id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Student progress retrieved", "content": {"application/json": {"schema": {"type": "object", "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Progress"}}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/progress/courses/{course_id}/compute-grades": {
+      "post": {
+        "tags": ["Progress"],
+        "summary": "Compute grades for a course",
+        "operationId": "computeGrades",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "course_id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/IdempotencyKey"}],
+        "responses": {
+          "200": {"description": "Grades computed", "content": {"application/json": {"schema": {"type": "object", "properties": {"message": {"type": "string"}, "updated_count": {"type": "integer"}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/progress/report-cards/students/{student_id}": {
+      "get": {
+        "tags": ["Progress"],
+        "summary": "Get student report card",
+        "operationId": "getStudentReportCard",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "student_id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"name": "term_id", "in": "query", "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Report card retrieved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ReportCard"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "post": {
+        "tags": ["Progress"],
+        "summary": "Generate student report card",
+        "operationId": "generateReportCard",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "student_id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/IdempotencyKey"}],
+        "responses": {
+          "201": {"description": "Report card generated", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ReportCard"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/meetings": {
+      "get": {
+        "tags": ["Meetings"],
+        "summary": "List meetings",
+        "operationId": "listMeetings",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "status", "in": "query", "schema": {"type": "string", "enum": ["SCHEDULED", "LIVE", "ENDED", "CANCELLED"]}}],
+        "responses": {
+          "200": {"description": "Meetings retrieved", "content": {"application/json": {"schema": {"type": "object", "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Meeting"}}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      },
+      "post": {
+        "tags": ["Meetings"],
+        "summary": "Schedule meeting",
+        "operationId": "scheduleMeeting",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ScheduleMeetingRequest"}}}},
+        "responses": {
+          "201": {"description": "Meeting scheduled", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Meeting"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/meetings/{id}": {
+      "get": {
+        "tags": ["Meetings"],
+        "summary": "Get meeting by ID",
+        "operationId": "getMeeting",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Meeting retrieved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Meeting"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "put": {
+        "tags": ["Meetings"],
+        "summary": "Update meeting",
+        "operationId": "updateMeeting",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UpdateMeetingRequest"}}}},
+        "responses": {
+          "200": {"description": "Meeting updated", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Meeting"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/meetings/{id}/start": {
+      "post": {
+        "tags": ["Meetings"],
+        "summary": "Start meeting",
+        "operationId": "startMeeting",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/IdempotencyKey"}],
+        "responses": {
+          "200": {"description": "Meeting started", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Meeting"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/meetings/{id}/end": {
+      "post": {
+        "tags": ["Meetings"],
+        "summary": "End meeting",
+        "operationId": "endMeeting",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/IdempotencyKey"}],
+        "responses": {
+          "200": {"description": "Meeting ended", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Meeting"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/meetings/{id}/join": {
+      "get": {
+        "tags": ["Meetings"],
+        "summary": "Get meeting join URL",
+        "operationId": "joinMeeting",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Join URL retrieved", "content": {"application/json": {"schema": {"type": "object", "properties": {"join_url": {"type": "string", "format": "uri"}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/communications/emails": {
+      "get": {
+        "tags": ["Communications"],
+        "summary": "List emails",
+        "operationId": "listEmails",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "status", "in": "query", "schema": {"type": "string", "enum": ["DRAFT", "SCHEDULED", "SENDING", "SENT", "FAILED", "CANCELLED"]}}],
+        "responses": {
+          "200": {"description": "Emails retrieved", "content": {"application/json": {"schema": {"type": "object", "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Email"}}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      },
+      "post": {
+        "tags": ["Communications"],
+        "summary": "Compose email",
+        "operationId": "composeEmail",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComposeEmailRequest"}}}},
+        "responses": {
+          "201": {"description": "Email composed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Email"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/communications/emails/{id}": {
+      "get": {
+        "tags": ["Communications"],
+        "summary": "Get email by ID",
+        "operationId": "getEmail",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Email retrieved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Email"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "delete": {
+        "tags": ["Communications"],
+        "summary": "Delete email",
+        "operationId": "deleteEmail",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "204": {"description": "Email deleted"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/communications/emails/{id}/send": {
+      "post": {
+        "tags": ["Communications"],
+        "summary": "Send email immediately",
+        "operationId": "sendEmailNow",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/IdempotencyKey"}],
+        "responses": {
+          "200": {"description": "Email sent", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Email"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/communications/emails/{id}/schedule": {
+      "post": {
+        "tags": ["Communications"],
+        "summary": "Schedule email",
+        "operationId": "scheduleEmail",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "properties": {"scheduled_for": {"type": "string", "format": "date-time"}}}}}},
+        "responses": {
+          "200": {"description": "Email scheduled", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Email"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/billing/invoices": {
+      "get": {
+        "tags": ["Billing"],
+        "summary": "List invoices",
+        "operationId": "listInvoices",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "status", "in": "query", "schema": {"type": "string", "enum": ["DRAFT", "PENDING", "PAID", "OVERDUE", "VOID", "DISPUTED"]}}],
+        "responses": {
+          "200": {"description": "Invoices retrieved", "content": {"application/json": {"schema": {"type": "object", "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Invoice"}}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/billing/invoices/{id}": {
+      "get": {
+        "tags": ["Billing"],
+        "summary": "Get invoice by ID",
+        "operationId": "getInvoice",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Invoice retrieved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Invoice"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/billing/invoices/{id}/pay": {
+      "post": {
+        "tags": ["Billing"],
+        "summary": "Mark invoice as paid",
+        "operationId": "markInvoiceAsPaid",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}, {"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "properties": {"payment_reference": {"type": "string"}, "payment_method": {"type": "string"}}}}}},
+        "responses": {
+          "200": {"description": "Invoice marked as paid", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Invoice"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/billing/subscriptions": {
+      "get": {
+        "tags": ["Billing"],
+        "summary": "List subscriptions",
+        "operationId": "listSubscriptions",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {"description": "Subscriptions retrieved", "content": {"application/json": {"schema": {"type": "object", "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Subscription"}}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/billing/subscriptions/{id}": {
+      "get": {
+        "tags": ["Billing"],
+        "summary": "Get subscription by ID",
+        "operationId": "getSubscription",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Subscription retrieved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Subscription"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/billing/metrics": {
+      "get": {
+        "tags": ["Billing"],
+        "summary": "Get billing metrics",
+        "operationId": "getBillingMetrics",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {"description": "Metrics retrieved", "content": {"application/json": {"schema": {"type": "object", "properties": {"total_revenue": {"type": "number"}, "pending_amount": {"type": "number"}, "overdue_amount": {"type": "number"}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/audit/logs": {
+      "get": {
+        "tags": ["Audit"],
+        "summary": "List audit logs",
+        "operationId": "listAuditLogs",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"name": "user_id", "in": "query", "schema": {"type": "string", "format": "uuid"}},
+          {"name": "action", "in": "query", "schema": {"type": "string"}},
+          {"name": "resource_type", "in": "query", "schema": {"type": "string"}},
+          {"name": "from", "in": "query", "schema": {"type": "string", "format": "date-time"}},
+          {"name": "to", "in": "query", "schema": {"type": "string", "format": "date-time"}},
+          {"$ref": "#/components/parameters/Page"},
+          {"$ref": "#/components/parameters/Limit"}
+        ],
+        "responses": {
+          "200": {"description": "Audit logs retrieved", "content": {"application/json": {"schema": {"type": "object", "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/AuditLog"}}, "pagination": {"$ref": "#/components/schemas/PaginatedResult"}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/audit/logs/{id}": {
+      "get": {
+        "tags": ["Audit"],
+        "summary": "Get audit log by ID",
+        "operationId": "getAuditLog",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}],
+        "responses": {
+          "200": {"description": "Audit log retrieved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AuditLog"}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/audit/logs/resource": {
+      "get": {
+        "tags": ["Audit"],
+        "summary": "Get audit trail for a resource",
+        "operationId": "getResourceAuditTrail",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"name": "resource_type", "in": "query", "required": true, "schema": {"type": "string"}},
+          {"name": "resource_id", "in": "query", "required": true, "schema": {"type": "string", "format": "uuid"}}
+        ],
+        "responses": {
+          "200": {"description": "Audit trail retrieved", "content": {"application/json": {"schema": {"type": "object", "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/AuditLog"}}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/notifications": {
+      "get": {
+        "tags": ["Notifications"],
+        "summary": "List notifications",
+        "description": "Get paginated list of notifications for the authenticated user",
+        "operationId": "listNotifications",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "unread_only",
+            "in": "query",
+            "description": "Only return unread notifications",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Pagination cursor",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Number of results (default 50, max 100)",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notifications retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Notification"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/PaginatedResult"
+                    },
+                    "unread_count": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/notifications/unread-count": {
+      "get": {
+        "tags": ["Notifications"],
+        "summary": "Get unread notification count",
+        "description": "Get the count of unread notifications for the authenticated user",
+        "operationId": "getUnreadNotificationCount",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Unread count retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "unread_count": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/notifications/mark-all-read": {
+      "post": {
+        "tags": ["Notifications"],
+        "summary": "Mark all notifications as read",
+        "description": "Mark all notifications as read for the authenticated user",
+        "operationId": "markAllNotificationsAsRead",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "All notifications marked as read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "updated_count": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/notifications/{id}": {
+      "get": {
+        "tags": ["Notifications"],
+        "summary": "Get notification by ID",
+        "description": "Get a specific notification",
+        "operationId": "getNotification",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Notification UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notification retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Notification"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Notifications"],
+        "summary": "Delete notification",
+        "description": "Delete a specific notification",
+        "operationId": "deleteNotification",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Notification UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notification deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/notifications/{id}/read": {
+      "post": {
+        "tags": ["Notifications"],
+        "summary": "Mark notification as read",
+        "description": "Mark a specific notification as read",
+        "operationId": "markNotificationAsRead",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Notification UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notification marked as read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/ws/stats": {
+      "get": {
+        "tags": ["WebSocket"],
+        "summary": "Get WebSocket connection statistics",
+        "description": "Returns the number of online users and total WebSocket connections. Requires authentication.",
+        "operationId": "getWebSocketStats",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "WebSocket statistics retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "online_users": {
+                      "type": "integer",
+                      "description": "Number of unique users with active WebSocket connections"
+                    },
+                    "total_connections": {
+                      "type": "integer",
+                      "description": "Total number of active WebSocket connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1526,6 +2789,93 @@
       }
     },
     "schemas": {
+      "Notification": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenant_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "event_type": {
+            "type": "string",
+            "enum": ["QUIZ_PUBLISHED", "ASSIGNMENT_PUBLISHED", "ASSIGNMENT_DEADLINE_APPROACHING", "EXAMINATION_SCHEDULED", "EXAMINATION_WINDOW_OPEN", "EXAMINATION_WINDOW_CLOSE", "GRADE_PUBLISHED", "TIMETABLE_PUBLISHED", "TIMETABLE_UPDATED", "MEETING_SCHEDULED", "MEETING_CANCELLED", "MEETING_STARTING", "INVOICE_GENERATED", "PAYMENT_OVERDUE", "CUSTOM"]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          },
+          "body": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 1000
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["IN_APP", "PUSH", "EMAIL", "SMS"]
+            }
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["LOW", "NORMAL", "HIGH", "URGENT"]
+          },
+          "action_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "resource_type": {
+            "type": "string"
+          },
+          "resource_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "is_read": {
+            "type": "boolean"
+          },
+          "read_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "delivered_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "WebSocketMessage": {
+        "type": "object",
+        "description": "Message format for WebSocket communication",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["NOTIFICATION", "NOTIFICATION_READ", "PING", "PONG"],
+            "description": "Type of WebSocket message"
+          },
+          "payload": {
+            "type": "object",
+            "description": "Message payload (varies by type)"
+          }
+        }
+      },
       "Error": {
         "type": "object",
         "required": ["error"],

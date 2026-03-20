@@ -23,6 +23,7 @@ const (
 	CommunicationStatusScheduled CommunicationStatus = "SCHEDULED"
 	CommunicationStatusSending   CommunicationStatus = "SENDING"
 	CommunicationStatusSent      CommunicationStatus = "SENT"
+	CommunicationStatusPartial   CommunicationStatus = "PARTIAL" // Some recipients failed
 	CommunicationStatusFailed    CommunicationStatus = "FAILED"
 	CommunicationStatusCancelled CommunicationStatus = "CANCELLED"
 )

@@ -46,15 +46,16 @@ CREATE TABLE IF NOT EXISTS periods (
 
 -- Create EXCLUDE constraint to prevent tutor double-booking (requires btree_gist extension)
 -- This prevents a tutor from having overlapping periods on the same day
+-- Convert TIME to integer minutes for GiST comparison (immutable operation)
 ALTER TABLE periods
 ADD CONSTRAINT exclude_periods_tutor_double_booking
 EXCLUDE USING gist (
     tenant_id WITH =,
     tutor_id WITH =,
     day_of_week WITH =,
-    tstzrange(
-        (CURRENT_DATE + start_time)::timestamptz,
-        (CURRENT_DATE + end_time)::timestamptz
+    int4range(
+        (EXTRACT(HOUR FROM start_time) * 60 + EXTRACT(MINUTE FROM start_time))::int,
+        (EXTRACT(HOUR FROM end_time) * 60 + EXTRACT(MINUTE FROM end_time))::int
     ) WITH &&
 );
 

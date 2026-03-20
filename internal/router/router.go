@@ -15,6 +15,7 @@ import (
 	"arc-lms/internal/pkg/idempotency"
 	"arc-lms/internal/pkg/jwt"
 	customLogger "arc-lms/internal/pkg/logger"
+	ws "arc-lms/internal/pkg/websocket"
 	"arc-lms/internal/repository/postgres"
 	"arc-lms/internal/service"
 )
@@ -27,7 +28,13 @@ type RouterConfig struct {
 	AllowedOrigins []string
 }
 
-func SetupRouter(cfg *RouterConfig) *gin.Engine {
+// RouterResult contains the configured router and WebSocket hub
+type RouterResult struct {
+	Router *gin.Engine
+	WSHub  *ws.Hub
+}
+
+func SetupRouter(cfg *RouterConfig) *RouterResult {
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -42,6 +49,10 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 	router.Use(middleware.CORSMiddleware(&middleware.CORSConfig{
 		AllowedOrigins: cfg.AllowedOrigins,
 	}))
+
+	// Initialize WebSocket hub
+	wsHub := ws.NewHub(nil)
+	go wsHub.Run()
 
 	router.GET("/health", healthCheckHandler)
 	router.GET("/ping", func(c *gin.Context) {
@@ -106,7 +117,7 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 	courseService := service.NewCourseService(courseRepo, classRepo, userRepo, auditService)
 	enrollmentService := service.NewEnrollmentService(enrollmentRepo, classRepo, userRepo, sessionRepo, auditService)
 	dashboardService := service.NewDashboardService(tenantRepo, userRepo, sessionRepo, classRepo, courseRepo, enrollmentRepo, invoiceRepo)
-	notificationService := service.NewNotificationService(notificationRepo, userRepo)
+	notificationService := service.NewNotificationService(notificationRepo, userRepo, wsHub)
 	assessmentService := service.NewAssessmentService(quizRepo, assignmentRepo, courseRepo, auditService)
 	timetableService := service.NewTimetableService(
 		cfg.DB,
@@ -165,6 +176,10 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 	meetingHandler := handler.NewMeetingHandler(meetingService)
 	communicationHandler := handler.NewCommunicationHandler(communicationService)
 	billingHandler := handler.NewBillingHandler(billingService)
+	wsHandler := handler.NewWebSocketHandler(wsHub, cfg.JWTManager, nil)
+
+	// WebSocket endpoint (outside v1 group, handles its own auth)
+	router.GET("/ws", wsHandler.HandleConnection)
 
 	v1 := router.Group("/api/v1")
 	{
@@ -478,10 +493,16 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				audit.GET("/logs/resource", auditHandler.GetResourceAuditTrail)
 				audit.GET("/logs/:id", auditHandler.GetAuditLog)
 			}
+
+			// WebSocket stats (admin only)
+			protected.GET("/ws/stats", wsHandler.GetStats)
 		}
 	}
 
-	return router
+	return &RouterResult{
+		Router: router,
+		WSHub:  wsHub,
+	}
 }
 
 func healthCheckHandler(c *gin.Context) {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"arc-lms/internal/domain"
+	ws "arc-lms/internal/pkg/websocket"
 	"arc-lms/internal/repository"
 	"arc-lms/internal/repository/postgres"
 
@@ -16,16 +17,19 @@ import (
 type NotificationService struct {
 	notificationRepo *postgres.NotificationRepository
 	userRepo         *postgres.UserRepository
+	wsHub            *ws.Hub
 }
 
 // NewNotificationService creates a new notification service
 func NewNotificationService(
 	notificationRepo *postgres.NotificationRepository,
 	userRepo *postgres.UserRepository,
+	wsHub *ws.Hub,
 ) *NotificationService {
 	return &NotificationService{
 		notificationRepo: notificationRepo,
 		userRepo:         userRepo,
+		wsHub:            wsHub,
 	}
 }
 
@@ -71,7 +75,33 @@ func (s *NotificationService) CreateNotification(
 		return nil, fmt.Errorf("failed to create notification: %w", err)
 	}
 
+	// Broadcast via WebSocket for instant delivery
+	s.broadcastNotification(notification)
+
 	return notification, nil
+}
+
+// broadcastNotification sends a notification via WebSocket to the user
+func (s *NotificationService) broadcastNotification(notification *domain.Notification) {
+	if s.wsHub == nil {
+		return
+	}
+
+	s.wsHub.SendToUser(notification.UserID, &ws.Message{
+		Type:    ws.MessageTypeNotification,
+		Payload: notification,
+	})
+}
+
+// broadcastNotifications sends multiple notifications via WebSocket
+func (s *NotificationService) broadcastNotifications(notifications []*domain.Notification) {
+	if s.wsHub == nil {
+		return
+	}
+
+	for _, notification := range notifications {
+		s.broadcastNotification(notification)
+	}
 }
 
 // SendNotificationToUsers sends a notification to multiple users
@@ -113,6 +143,9 @@ func (s *NotificationService) SendNotificationToUsers(
 	if err := s.notificationRepo.CreateBatch(ctx, notifications); err != nil {
 		return fmt.Errorf("failed to send notifications: %w", err)
 	}
+
+	// Broadcast via WebSocket for instant delivery
+	s.broadcastNotifications(notifications)
 
 	return nil
 }

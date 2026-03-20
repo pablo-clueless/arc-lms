@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml"
+  xmlns:o="urn:schemas-microsoft-com:office:office">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@4.6.0/fonts/remixicon.css" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&family=Hedvig+Letters+Serif:opsz@12..24&display=swap"
+    rel="stylesheet">
+  <title>Account Suspended - ArcLMS</title>
+  <style>
+    * {
+      font-family: "Figtree", sans-serif;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      font-family: "Hedvig Letters Serif", serif;
+    }
+
+    .icon {
+      text-decoration: none;
+      color: #fff;
+      font-size: 20px;
+    }
+
+    .button {
+      display: inline-block;
+      padding: 14px 28px;
+      background-color: #27AE60;
+      color: #ffffff;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .button-secondary {
+      display: inline-block;
+      padding: 14px 28px;
+      background-color: #95A5A6;
+      color: #ffffff;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .suspension-box {
+      background-color: #2C3E50;
+      color: #ffffff;
+      padding: 30px;
+      margin: 25px 0;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .suspension-icon {
+      font-size: 48px;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+
+<body style="background-color: #eff1f3;margin: 0;padding: 0;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+      <td align="center" style="padding: 20px;">
+        <table width="600" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="padding: 40px 20px;">
+              <h1 style="font-size: 24px;margin: 0;">ArcLMS</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color: #ffffff; padding: 40px; border-radius: 8px 8px 0 0;">
+              <h2 style="font-size: 24px;font-weight: 500;margin: 0 0 20px 0;color: #333;">Account Suspended</h2>
+              <p style="font-size: 16px;color: #555;margin: 0 0 20px 0;">Hi {{ .TenantName }},</p>
+              <p style="font-size: 16px;color: #555;margin: 0 0 20px 0;">
+                We regret to inform you that your ArcLMS account has been suspended.
+              </p>
+              <div class="suspension-box">
+                <div class="suspension-icon">&#9888;</div>
+                <p style="font-size: 18px;margin: 0 0 15px 0;font-weight: 600;">Account Access Restricted</p>
+                <p style="font-size: 14px;margin: 0;opacity: 0.9;">
+                  {{ .Reason }}
+                </p>
+                {{ if .DaysOverdue }}
+                <p style="font-size: 14px;margin: 15px 0 0 0;opacity: 0.9;">
+                  Payment overdue: {{ .DaysOverdue }} days
+                </p>
+                {{ end }}
+              </div>
+              <p style="font-size: 16px;color: #555;margin: 0 0 20px 0;">
+                <strong>What this means:</strong>
+              </p>
+              <ul style="font-size: 14px;color: #666;margin: 0 0 25px 0;padding-left: 20px;">
+                <li style="margin-bottom: 8px;">Students and tutors cannot access the platform</li>
+                <li style="margin-bottom: 8px;">Scheduled meetings and deadlines are paused</li>
+                <li style="margin-bottom: 8px;">All data remains secure and will be restored upon reactivation</li>
+              </ul>
+              <p style="font-size: 16px;color: #555;margin: 0 0 30px 0;">
+                To reactivate your account, please settle the outstanding balance or contact our support team.
+              </p>
+              <p style="margin: 0 0 15px 0;text-align: center;">
+                <a href="{{ .ReactivationURL }}" class="button" style="color: #ffffff;">Reactivate Account</a>
+              </p>
+              <p style="margin: 0 0 30px 0;text-align: center;">
+                <a href="{{ .ContactURL }}" class="button-secondary" style="color: #ffffff;">Contact Support</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color: #000; color: white; padding: 30px; border-radius: 0 0 8px 8px;">
+              <p style="font-size: 14px;margin: 0 0 15px 0;">
+                This email was sent to {{ .Email }}.
+              </p>
+              <p style="font-size: 14px;margin: 0 0 30px 0;">&copy; {{ .Year }} ArcLMS. All rights reserved.</p>
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td>
+                    <h1 style="font-size: 20px;margin: 0;">ArcLMS</h1>
+                  </td>
+                  <td align="right">
+                    <a href="https://x.com/" style="margin: 0 10px;" class="ri-twitter-fill icon"></a>
+                    <a href="https://linkedin.com/company/" style="margin: 0 10px;" class="ri-linkedin-fill icon"></a>
+                    <a href="https://web.facebook.com/" style="margin: 0 10px;" class="ri-facebook-fill icon"></a>
+                    <a href="https://instagram.com/" style="margin: 0 10px;" class="ri-instagram-fill icon"></a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+
+</html>

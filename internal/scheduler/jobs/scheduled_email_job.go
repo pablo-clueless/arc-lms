@@ -7,12 +7,14 @@ import (
 	"time"
 
 	"arc-lms/internal/domain"
+	"arc-lms/internal/pkg/email"
 	"arc-lms/internal/repository/postgres"
 )
 
 // ScheduledEmailJob sends emails that are scheduled for delivery
 type ScheduledEmailJob struct {
 	communicationRepo *postgres.CommunicationRepository
+	emailService      *email.EmailService
 	logger            *log.Logger
 	interval          time.Duration
 }
@@ -20,6 +22,7 @@ type ScheduledEmailJob struct {
 // NewScheduledEmailJob creates a new scheduled email job
 func NewScheduledEmailJob(
 	communicationRepo *postgres.CommunicationRepository,
+	emailService *email.EmailService,
 	logger *log.Logger,
 ) *ScheduledEmailJob {
 	if logger == nil {
@@ -27,6 +30,7 @@ func NewScheduledEmailJob(
 	}
 	return &ScheduledEmailJob{
 		communicationRepo: communicationRepo,
+		emailService:      emailService,
 		logger:            logger,
 		interval:          1 * time.Minute, // Check every minute
 	}
@@ -46,6 +50,11 @@ func (j *ScheduledEmailJob) Interval() time.Duration {
 func (j *ScheduledEmailJob) Run(ctx context.Context) error {
 	j.logger.Println("[ScheduledEmailJob] Checking for scheduled emails")
 
+	if j.emailService == nil || !j.emailService.IsConfigured() {
+		j.logger.Println("[ScheduledEmailJob] Email service not configured, skipping")
+		return nil
+	}
+
 	// Get emails scheduled for now or earlier
 	emails, err := j.communicationRepo.ListScheduled(ctx, time.Now())
 	if err != nil {
@@ -53,7 +62,6 @@ func (j *ScheduledEmailJob) Run(ctx context.Context) error {
 	}
 
 	if len(emails) == 0 {
-		j.logger.Println("[ScheduledEmailJob] No scheduled emails to process")
 		return nil
 	}
 
@@ -61,7 +69,7 @@ func (j *ScheduledEmailJob) Run(ctx context.Context) error {
 
 	var successCount, failCount int
 
-	for _, email := range emails {
+	for _, emailMsg := range emails {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -69,18 +77,24 @@ func (j *ScheduledEmailJob) Run(ctx context.Context) error {
 		}
 
 		// Mark as sending
-		email.Status = domain.CommunicationStatusSending
-		email.UpdatedAt = time.Now()
+		emailMsg.Status = domain.CommunicationStatusSending
+		emailMsg.UpdatedAt = time.Now()
 
-		if err := j.communicationRepo.Update(ctx, email); err != nil {
-			j.logger.Printf("[ScheduledEmailJob] Failed to update email %s status: %v", email.ID, err)
+		if err := j.communicationRepo.Update(ctx, emailMsg); err != nil {
+			j.logger.Printf("[ScheduledEmailJob] Failed to update email %s status: %v", emailMsg.ID, err)
 			failCount++
 			continue
 		}
 
 		// Process each recipient
-		if err := j.sendEmail(ctx, email); err != nil {
-			j.logger.Printf("[ScheduledEmailJob] Failed to send email %s: %v", email.ID, err)
+		if err := j.sendEmail(ctx, emailMsg); err != nil {
+			j.logger.Printf("[ScheduledEmailJob] Failed to send email %s: %v", emailMsg.ID, err)
+
+			// Mark as failed
+			emailMsg.Status = domain.CommunicationStatusFailed
+			emailMsg.UpdatedAt = time.Now()
+			j.communicationRepo.Update(ctx, emailMsg)
+
 			failCount++
 			continue
 		}
@@ -92,65 +106,72 @@ func (j *ScheduledEmailJob) Run(ctx context.Context) error {
 	return nil
 }
 
-// sendEmail sends an email to all recipients
-func (j *ScheduledEmailJob) sendEmail(ctx context.Context, email *domain.Email) error {
-	// In a real implementation, this would integrate with an email service provider
-	// like SendGrid, AWS SES, Mailgun, Postmark, etc.
-
+// sendEmail sends an email to all recipients using the email service
+func (j *ScheduledEmailJob) sendEmail(ctx context.Context, emailMsg *domain.Email) error {
 	now := time.Now()
+	var lastError error
 
-	for i := range email.Recipients {
+	for i := range emailMsg.Recipients {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
 		}
 
-		// Simulate sending - in production, call the email provider API
-		// Example with SendGrid:
-		// err := sendgrid.Send(email.Recipients[i].Email, email.Subject, email.Body, email.HTMLBody)
+		recipient := &emailMsg.Recipients[i]
 
-		// For now, mark all as successful
-		email.Recipients[i].Status = domain.CommunicationStatusSent
-		email.Recipients[i].SentAt = &now
-		email.SuccessCount++
+		// Send using the email service
+		htmlBody := ""
+		if emailMsg.HTMLBody != nil {
+			htmlBody = *emailMsg.HTMLBody
+		}
 
-		// In real implementation, handle failures:
-		// if err != nil {
-		//     email.Recipients[i].Status = domain.CommunicationStatusFailed
-		//     email.Recipients[i].FailedAt = &now
-		//     reason := err.Error()
-		//     email.Recipients[i].FailureReason = &reason
-		//     email.FailureCount++
-		// }
+		err := j.emailService.Send(
+			recipient.Email,
+			emailMsg.Subject,
+			emailMsg.Body,
+			htmlBody,
+		)
+
+		if err != nil {
+			j.logger.Printf("[ScheduledEmailJob] Failed to send to %s: %v", recipient.Email, err)
+			recipient.Status = domain.CommunicationStatusFailed
+			recipient.FailedAt = &now
+			reason := err.Error()
+			recipient.FailureReason = &reason
+			emailMsg.FailureCount++
+			lastError = err
+		} else {
+			recipient.Status = domain.CommunicationStatusSent
+			recipient.SentAt = &now
+			emailMsg.SuccessCount++
+		}
 	}
 
-	// Update email status to sent
-	email.Status = domain.CommunicationStatusSent
-	email.SentAt = &now
-	email.UpdatedAt = now
+	// Update email status based on results
+	if emailMsg.SuccessCount > 0 {
+		if emailMsg.FailureCount > 0 {
+			emailMsg.Status = domain.CommunicationStatusPartial
+		} else {
+			emailMsg.Status = domain.CommunicationStatusSent
+		}
+		emailMsg.SentAt = &now
+	} else {
+		emailMsg.Status = domain.CommunicationStatusFailed
+	}
+	emailMsg.UpdatedAt = now
 
-	if err := j.communicationRepo.Update(ctx, email); err != nil {
+	if err := j.communicationRepo.Update(ctx, emailMsg); err != nil {
 		return fmt.Errorf("failed to update email after sending: %w", err)
 	}
 
-	j.logger.Printf("[ScheduledEmailJob] Sent email %s to %d recipients", email.ID, len(email.Recipients))
-	return nil
-}
+	j.logger.Printf("[ScheduledEmailJob] Email %s: %d sent, %d failed",
+		emailMsg.ID, emailMsg.SuccessCount, emailMsg.FailureCount)
 
-// EmailProvider interface for email service providers
-type EmailProvider interface {
-	Send(to, subject, textBody, htmlBody string) error
-	SendBatch(recipients []string, subject, textBody, htmlBody string) error
-}
+	// Return error only if all failed
+	if emailMsg.SuccessCount == 0 && lastError != nil {
+		return lastError
+	}
 
-// MockEmailProvider is a mock implementation for testing
-type MockEmailProvider struct{}
-
-func (p *MockEmailProvider) Send(to, subject, textBody, htmlBody string) error {
-	return nil
-}
-
-func (p *MockEmailProvider) SendBatch(recipients []string, subject, textBody, htmlBody string) error {
 	return nil
 }

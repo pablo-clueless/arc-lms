@@ -15,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"arc-lms/internal/config"
+	"arc-lms/internal/pkg/email"
 	"arc-lms/internal/pkg/jwt"
 	"arc-lms/internal/router"
 	"arc-lms/internal/scheduler"
@@ -69,7 +70,7 @@ func main() {
 		allowedOrigins = []string{"https://arc-lms.onrender.com"}
 	}
 
-	r := router.SetupRouter(&router.RouterConfig{
+	routerResult := router.SetupRouter(&router.RouterConfig{
 		DB:             db,
 		RedisClient:    redisClient,
 		JWTManager:     jwtManager,
@@ -78,9 +79,22 @@ func main() {
 	})
 
 	log.Println("✅ Router configured")
+	log.Println("🔌 WebSocket hub started")
+
+	// Initialize email service
+	emailService := email.NewEmailService(cfg.SMTP, nil)
+	if emailService.IsConfigured() {
+		log.Println("📧 Email service configured (Brevo SMTP)")
+	} else {
+		log.Println("⚠️  Email service not configured, emails will be skipped")
+	}
 
 	// Initialize and start background job scheduler
-	jobScheduler := scheduler.SetupScheduler(db, nil)
+	jobScheduler := scheduler.SetupScheduler(&scheduler.SchedulerConfig{
+		DB:           db,
+		EmailService: emailService,
+		Logger:       nil,
+	})
 	jobScheduler.Start()
 	defer jobScheduler.Stop()
 
@@ -88,7 +102,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Server.Port,
-		Handler:      r,
+		Handler:      routerResult.Router,
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
 	}
