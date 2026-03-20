@@ -2876,6 +2876,632 @@
           }
         }
       },
+      "Term": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "session_id": {"type": "string", "format": "uuid"},
+          "name": {"type": "string", "enum": ["FIRST", "SECOND", "THIRD"]},
+          "start_date": {"type": "string", "format": "date"},
+          "end_date": {"type": "string", "format": "date"},
+          "status": {"type": "string", "enum": ["UPCOMING", "ACTIVE", "COMPLETED"]},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "CreateTermRequest": {
+        "type": "object",
+        "required": ["name", "start_date", "end_date"],
+        "properties": {
+          "name": {"type": "string", "enum": ["FIRST", "SECOND", "THIRD"]},
+          "start_date": {"type": "string", "format": "date"},
+          "end_date": {"type": "string", "format": "date"}
+        }
+      },
+      "UpdateTermRequest": {
+        "type": "object",
+        "properties": {
+          "start_date": {"type": "string", "format": "date"},
+          "end_date": {"type": "string", "format": "date"}
+        }
+      },
+      "Class": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "name": {"type": "string"},
+          "grade_level": {"type": "string"},
+          "section": {"type": "string"},
+          "capacity": {"type": "integer"},
+          "form_tutor_id": {"type": "string", "format": "uuid"},
+          "status": {"type": "string", "enum": ["ACTIVE", "ARCHIVED"]},
+          "student_count": {"type": "integer"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "CreateClassRequest": {
+        "type": "object",
+        "required": ["name", "grade_level"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1, "maxLength": 100},
+          "grade_level": {"type": "string", "minLength": 1, "maxLength": 50},
+          "section": {"type": "string", "maxLength": 20},
+          "capacity": {"type": "integer", "minimum": 1, "maximum": 100},
+          "form_tutor_id": {"type": "string", "format": "uuid"}
+        }
+      },
+      "UpdateClassRequest": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "minLength": 1, "maxLength": 100},
+          "grade_level": {"type": "string", "minLength": 1, "maxLength": 50},
+          "section": {"type": "string", "maxLength": 20},
+          "capacity": {"type": "integer", "minimum": 1, "maximum": 100},
+          "form_tutor_id": {"type": "string", "format": "uuid"}
+        }
+      },
+      "Course": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "class_id": {"type": "string", "format": "uuid"},
+          "name": {"type": "string"},
+          "code": {"type": "string"},
+          "description": {"type": "string"},
+          "tutor_id": {"type": "string", "format": "uuid"},
+          "tutor": {"$ref": "#/components/schemas/User"},
+          "credits": {"type": "integer"},
+          "periods_per_week": {"type": "integer"},
+          "status": {"type": "string", "enum": ["ACTIVE", "ARCHIVED"]},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "CreateCourseRequest": {
+        "type": "object",
+        "required": ["class_id", "name", "code", "tutor_id"],
+        "properties": {
+          "class_id": {"type": "string", "format": "uuid"},
+          "name": {"type": "string", "minLength": 1, "maxLength": 200},
+          "code": {"type": "string", "minLength": 1, "maxLength": 20},
+          "description": {"type": "string", "maxLength": 1000},
+          "tutor_id": {"type": "string", "format": "uuid"},
+          "credits": {"type": "integer", "minimum": 1},
+          "periods_per_week": {"type": "integer", "minimum": 1, "maximum": 10}
+        }
+      },
+      "UpdateCourseRequest": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "minLength": 1, "maxLength": 200},
+          "code": {"type": "string", "minLength": 1, "maxLength": 20},
+          "description": {"type": "string", "maxLength": 1000},
+          "tutor_id": {"type": "string", "format": "uuid"},
+          "credits": {"type": "integer", "minimum": 1},
+          "periods_per_week": {"type": "integer", "minimum": 1, "maximum": 10}
+        }
+      },
+      "Quiz": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "course_id": {"type": "string", "format": "uuid"},
+          "title": {"type": "string"},
+          "description": {"type": "string"},
+          "instructions": {"type": "string"},
+          "questions": {"type": "array", "items": {"$ref": "#/components/schemas/Question"}},
+          "time_limit_minutes": {"type": "integer"},
+          "max_attempts": {"type": "integer"},
+          "passing_score": {"type": "number"},
+          "total_points": {"type": "number"},
+          "shuffle_questions": {"type": "boolean"},
+          "shuffle_options": {"type": "boolean"},
+          "show_results": {"type": "boolean"},
+          "availability_start": {"type": "string", "format": "date-time"},
+          "availability_end": {"type": "string", "format": "date-time"},
+          "status": {"type": "string", "enum": ["DRAFT", "PUBLISHED", "CLOSED", "ARCHIVED"]},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "CreateQuizRequest": {
+        "type": "object",
+        "required": ["title"],
+        "properties": {
+          "title": {"type": "string", "minLength": 1, "maxLength": 200},
+          "description": {"type": "string", "maxLength": 1000},
+          "instructions": {"type": "string", "maxLength": 2000},
+          "questions": {"type": "array", "items": {"$ref": "#/components/schemas/QuestionInput"}},
+          "time_limit_minutes": {"type": "integer", "minimum": 1},
+          "max_attempts": {"type": "integer", "minimum": 1},
+          "passing_score": {"type": "number", "minimum": 0, "maximum": 100},
+          "shuffle_questions": {"type": "boolean"},
+          "shuffle_options": {"type": "boolean"},
+          "show_results": {"type": "boolean"},
+          "availability_start": {"type": "string", "format": "date-time"},
+          "availability_end": {"type": "string", "format": "date-time"}
+        }
+      },
+      "Question": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "type": {"type": "string", "enum": ["MULTIPLE_CHOICE", "TRUE_FALSE", "SHORT_ANSWER", "ESSAY", "FILL_IN_BLANK"]},
+          "text": {"type": "string"},
+          "options": {"type": "array", "items": {"$ref": "#/components/schemas/QuestionOption"}},
+          "correct_answer": {"type": "string"},
+          "points": {"type": "number"},
+          "explanation": {"type": "string"},
+          "order": {"type": "integer"}
+        }
+      },
+      "QuestionInput": {
+        "type": "object",
+        "required": ["type", "text", "points"],
+        "properties": {
+          "type": {"type": "string", "enum": ["MULTIPLE_CHOICE", "TRUE_FALSE", "SHORT_ANSWER", "ESSAY", "FILL_IN_BLANK"]},
+          "text": {"type": "string", "minLength": 1},
+          "options": {"type": "array", "items": {"$ref": "#/components/schemas/QuestionOptionInput"}},
+          "correct_answer": {"type": "string"},
+          "points": {"type": "number", "minimum": 0},
+          "explanation": {"type": "string"}
+        }
+      },
+      "QuestionOption": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "text": {"type": "string"},
+          "is_correct": {"type": "boolean"}
+        }
+      },
+      "QuestionOptionInput": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": {"type": "string", "minLength": 1},
+          "is_correct": {"type": "boolean"}
+        }
+      },
+      "Assignment": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "course_id": {"type": "string", "format": "uuid"},
+          "title": {"type": "string"},
+          "description": {"type": "string"},
+          "instructions": {"type": "string"},
+          "due_date": {"type": "string", "format": "date-time"},
+          "total_points": {"type": "number"},
+          "allow_late_submission": {"type": "boolean"},
+          "late_penalty_percent": {"type": "number"},
+          "attachment_urls": {"type": "array", "items": {"type": "string", "format": "uri"}},
+          "status": {"type": "string", "enum": ["DRAFT", "PUBLISHED", "CLOSED", "ARCHIVED"]},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "CreateAssignmentRequest": {
+        "type": "object",
+        "required": ["title", "due_date", "total_points"],
+        "properties": {
+          "title": {"type": "string", "minLength": 1, "maxLength": 200},
+          "description": {"type": "string", "maxLength": 2000},
+          "instructions": {"type": "string", "maxLength": 5000},
+          "due_date": {"type": "string", "format": "date-time"},
+          "total_points": {"type": "number", "minimum": 0},
+          "allow_late_submission": {"type": "boolean"},
+          "late_penalty_percent": {"type": "number", "minimum": 0, "maximum": 100},
+          "attachment_urls": {"type": "array", "items": {"type": "string", "format": "uri"}}
+        }
+      },
+      "Enrollment": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "student_id": {"type": "string", "format": "uuid"},
+          "student": {"$ref": "#/components/schemas/User"},
+          "class_id": {"type": "string", "format": "uuid"},
+          "class": {"$ref": "#/components/schemas/Class"},
+          "session_id": {"type": "string", "format": "uuid"},
+          "status": {"type": "string", "enum": ["ACTIVE", "SUSPENDED", "WITHDRAWN", "GRADUATED", "TRANSFERRED"]},
+          "enrolled_at": {"type": "string", "format": "date-time"},
+          "withdrawn_at": {"type": "string", "format": "date-time"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "EnrollStudentRequest": {
+        "type": "object",
+        "required": ["student_id", "class_id", "session_id"],
+        "properties": {
+          "student_id": {"type": "string", "format": "uuid"},
+          "class_id": {"type": "string", "format": "uuid"},
+          "session_id": {"type": "string", "format": "uuid"}
+        }
+      },
+      "Timetable": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "class_id": {"type": "string", "format": "uuid"},
+          "term_id": {"type": "string", "format": "uuid"},
+          "status": {"type": "string", "enum": ["DRAFT", "PUBLISHED", "ARCHIVED"]},
+          "periods": {"type": "array", "items": {"$ref": "#/components/schemas/Period"}},
+          "generated_at": {"type": "string", "format": "date-time"},
+          "generated_by": {"type": "string", "format": "uuid"},
+          "published_at": {"type": "string", "format": "date-time"},
+          "generation_version": {"type": "integer"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "Period": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "timetable_id": {"type": "string", "format": "uuid"},
+          "course_id": {"type": "string", "format": "uuid"},
+          "course": {"$ref": "#/components/schemas/Course"},
+          "tutor_id": {"type": "string", "format": "uuid"},
+          "tutor": {"$ref": "#/components/schemas/User"},
+          "class_id": {"type": "string", "format": "uuid"},
+          "day_of_week": {"type": "string", "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"]},
+          "start_time": {"type": "string", "format": "time"},
+          "end_time": {"type": "string", "format": "time"},
+          "period_number": {"type": "integer"}
+        }
+      },
+      "GenerateTimetableRequest": {
+        "type": "object",
+        "required": ["class_id", "term_id"],
+        "properties": {
+          "class_id": {"type": "string", "format": "uuid"},
+          "term_id": {"type": "string", "format": "uuid"},
+          "config": {
+            "type": "object",
+            "properties": {
+              "periods_per_day": {"type": "integer", "minimum": 1, "maximum": 12},
+              "period_duration_minutes": {"type": "integer", "minimum": 30, "maximum": 120},
+              "break_duration_minutes": {"type": "integer", "minimum": 5, "maximum": 60},
+              "start_time": {"type": "string", "format": "time"},
+              "days": {"type": "array", "items": {"type": "string", "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"]}}
+            }
+          }
+        }
+      },
+      "SwapRequest": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "requester_id": {"type": "string", "format": "uuid"},
+          "requester": {"$ref": "#/components/schemas/User"},
+          "target_tutor_id": {"type": "string", "format": "uuid"},
+          "target_tutor": {"$ref": "#/components/schemas/User"},
+          "source_period_id": {"type": "string", "format": "uuid"},
+          "target_period_id": {"type": "string", "format": "uuid"},
+          "reason": {"type": "string"},
+          "status": {"type": "string", "enum": ["PENDING", "APPROVED", "REJECTED", "ESCALATED", "CANCELLED"]},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "CreateSwapRequestRequest": {
+        "type": "object",
+        "required": ["source_period_id", "target_period_id", "reason"],
+        "properties": {
+          "source_period_id": {"type": "string", "format": "uuid"},
+          "target_period_id": {"type": "string", "format": "uuid"},
+          "reason": {"type": "string", "minLength": 10, "maxLength": 500}
+        }
+      },
+      "Examination": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "course_id": {"type": "string", "format": "uuid"},
+          "course": {"$ref": "#/components/schemas/Course"},
+          "title": {"type": "string"},
+          "description": {"type": "string"},
+          "instructions": {"type": "string"},
+          "questions": {"type": "array", "items": {"$ref": "#/components/schemas/Question"}},
+          "total_points": {"type": "number"},
+          "time_limit_minutes": {"type": "integer"},
+          "passing_score": {"type": "number"},
+          "window_start": {"type": "string", "format": "date-time"},
+          "window_end": {"type": "string", "format": "date-time"},
+          "status": {"type": "string", "enum": ["DRAFT", "SCHEDULED", "IN_PROGRESS", "COMPLETED", "GRADED"]},
+          "shuffle_questions": {"type": "boolean"},
+          "shuffle_options": {"type": "boolean"},
+          "enable_proctoring": {"type": "boolean"},
+          "allow_backtrack": {"type": "boolean"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "CreateExaminationRequest": {
+        "type": "object",
+        "required": ["course_id", "title", "time_limit_minutes"],
+        "properties": {
+          "course_id": {"type": "string", "format": "uuid"},
+          "title": {"type": "string", "minLength": 1, "maxLength": 200},
+          "description": {"type": "string", "maxLength": 2000},
+          "instructions": {"type": "string", "maxLength": 5000},
+          "questions": {"type": "array", "items": {"$ref": "#/components/schemas/QuestionInput"}},
+          "time_limit_minutes": {"type": "integer", "minimum": 15, "maximum": 300},
+          "passing_score": {"type": "number", "minimum": 0, "maximum": 100},
+          "shuffle_questions": {"type": "boolean"},
+          "shuffle_options": {"type": "boolean"},
+          "enable_proctoring": {"type": "boolean"},
+          "allow_backtrack": {"type": "boolean"}
+        }
+      },
+      "UpdateExaminationRequest": {
+        "type": "object",
+        "properties": {
+          "title": {"type": "string", "minLength": 1, "maxLength": 200},
+          "description": {"type": "string", "maxLength": 2000},
+          "instructions": {"type": "string", "maxLength": 5000},
+          "questions": {"type": "array", "items": {"$ref": "#/components/schemas/QuestionInput"}},
+          "time_limit_minutes": {"type": "integer", "minimum": 15, "maximum": 300},
+          "passing_score": {"type": "number", "minimum": 0, "maximum": 100},
+          "shuffle_questions": {"type": "boolean"},
+          "shuffle_options": {"type": "boolean"},
+          "enable_proctoring": {"type": "boolean"},
+          "allow_backtrack": {"type": "boolean"}
+        }
+      },
+      "ExaminationSubmission": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "examination_id": {"type": "string", "format": "uuid"},
+          "student_id": {"type": "string", "format": "uuid"},
+          "student": {"$ref": "#/components/schemas/User"},
+          "answers": {"type": "array", "items": {"$ref": "#/components/schemas/AnswerSubmission"}},
+          "score": {"type": "number"},
+          "percentage": {"type": "number"},
+          "passed": {"type": "boolean"},
+          "status": {"type": "string", "enum": ["IN_PROGRESS", "SUBMITTED", "GRADED", "AUTO_SUBMITTED"]},
+          "started_at": {"type": "string", "format": "date-time"},
+          "submitted_at": {"type": "string", "format": "date-time"},
+          "graded_at": {"type": "string", "format": "date-time"},
+          "time_spent_seconds": {"type": "integer"},
+          "integrity_events": {"type": "array", "items": {"$ref": "#/components/schemas/IntegrityEvent"}}
+        }
+      },
+      "AnswerSubmission": {
+        "type": "object",
+        "properties": {
+          "question_id": {"type": "string", "format": "uuid"},
+          "answer": {"type": "string"},
+          "selected_options": {"type": "array", "items": {"type": "string"}},
+          "points_earned": {"type": "number"},
+          "feedback": {"type": "string"}
+        }
+      },
+      "IntegrityEvent": {
+        "type": "object",
+        "properties": {
+          "type": {"type": "string", "enum": ["TAB_SWITCH", "FOCUS_LOST", "COPY_PASTE", "RIGHT_CLICK", "SCREENSHOT_ATTEMPT"]},
+          "timestamp": {"type": "string", "format": "date-time"},
+          "details": {"type": "string"}
+        }
+      },
+      "Progress": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "student_id": {"type": "string", "format": "uuid"},
+          "student": {"$ref": "#/components/schemas/User"},
+          "course_id": {"type": "string", "format": "uuid"},
+          "course": {"$ref": "#/components/schemas/Course"},
+          "term_id": {"type": "string", "format": "uuid"},
+          "quiz_average": {"type": "number"},
+          "assignment_average": {"type": "number"},
+          "examination_score": {"type": "number"},
+          "attendance_percentage": {"type": "number"},
+          "final_score": {"type": "number"},
+          "grade": {"type": "string"},
+          "grade_points": {"type": "number"},
+          "position_in_class": {"type": "integer"},
+          "position_in_course": {"type": "integer"},
+          "tutor_remarks": {"type": "string"},
+          "is_flagged": {"type": "boolean"},
+          "flag_reason": {"type": "string"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "ReportCard": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "student_id": {"type": "string", "format": "uuid"},
+          "student": {"$ref": "#/components/schemas/User"},
+          "term_id": {"type": "string", "format": "uuid"},
+          "term": {"$ref": "#/components/schemas/Term"},
+          "class_id": {"type": "string", "format": "uuid"},
+          "class": {"$ref": "#/components/schemas/Class"},
+          "course_results": {"type": "array", "items": {"$ref": "#/components/schemas/Progress"}},
+          "total_score": {"type": "number"},
+          "average_score": {"type": "number"},
+          "overall_grade": {"type": "string"},
+          "class_position": {"type": "integer"},
+          "class_size": {"type": "integer"},
+          "attendance_percentage": {"type": "number"},
+          "days_present": {"type": "integer"},
+          "days_absent": {"type": "integer"},
+          "tutor_remarks": {"type": "string"},
+          "principal_remarks": {"type": "string"},
+          "generated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "Meeting": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "title": {"type": "string"},
+          "description": {"type": "string"},
+          "host_id": {"type": "string", "format": "uuid"},
+          "host": {"$ref": "#/components/schemas/User"},
+          "class_id": {"type": "string", "format": "uuid"},
+          "course_id": {"type": "string", "format": "uuid"},
+          "scheduled_start": {"type": "string", "format": "date-time"},
+          "scheduled_end": {"type": "string", "format": "date-time"},
+          "actual_start": {"type": "string", "format": "date-time"},
+          "actual_end": {"type": "string", "format": "date-time"},
+          "status": {"type": "string", "enum": ["SCHEDULED", "LIVE", "ENDED", "CANCELLED"]},
+          "meeting_url": {"type": "string", "format": "uri"},
+          "recording_url": {"type": "string", "format": "uri"},
+          "max_participants": {"type": "integer"},
+          "participant_count": {"type": "integer"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "ScheduleMeetingRequest": {
+        "type": "object",
+        "required": ["title", "scheduled_start", "scheduled_end"],
+        "properties": {
+          "title": {"type": "string", "minLength": 1, "maxLength": 200},
+          "description": {"type": "string", "maxLength": 1000},
+          "class_id": {"type": "string", "format": "uuid"},
+          "course_id": {"type": "string", "format": "uuid"},
+          "scheduled_start": {"type": "string", "format": "date-time"},
+          "scheduled_end": {"type": "string", "format": "date-time"},
+          "max_participants": {"type": "integer", "minimum": 2}
+        }
+      },
+      "UpdateMeetingRequest": {
+        "type": "object",
+        "properties": {
+          "title": {"type": "string", "minLength": 1, "maxLength": 200},
+          "description": {"type": "string", "maxLength": 1000},
+          "scheduled_start": {"type": "string", "format": "date-time"},
+          "scheduled_end": {"type": "string", "format": "date-time"},
+          "max_participants": {"type": "integer", "minimum": 2}
+        }
+      },
+      "Email": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "sender_id": {"type": "string", "format": "uuid"},
+          "sender": {"$ref": "#/components/schemas/User"},
+          "subject": {"type": "string"},
+          "body": {"type": "string"},
+          "html_body": {"type": "string"},
+          "recipient_scope": {"type": "string", "enum": ["ALL_USERS", "ALL_TUTORS", "ALL_STUDENTS", "CLASS", "COURSE", "SPECIFIC_USERS"]},
+          "target_class_id": {"type": "string", "format": "uuid"},
+          "target_course_id": {"type": "string", "format": "uuid"},
+          "specific_user_ids": {"type": "array", "items": {"type": "string", "format": "uuid"}},
+          "status": {"type": "string", "enum": ["DRAFT", "SCHEDULED", "SENDING", "SENT", "PARTIAL", "FAILED", "CANCELLED"]},
+          "scheduled_for": {"type": "string", "format": "date-time"},
+          "sent_at": {"type": "string", "format": "date-time"},
+          "total_recipients": {"type": "integer"},
+          "success_count": {"type": "integer"},
+          "failure_count": {"type": "integer"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "ComposeEmailRequest": {
+        "type": "object",
+        "required": ["subject", "body", "recipient_scope"],
+        "properties": {
+          "subject": {"type": "string", "minLength": 3, "maxLength": 200},
+          "body": {"type": "string", "minLength": 10},
+          "html_body": {"type": "string"},
+          "recipient_scope": {"type": "string", "enum": ["ALL_USERS", "ALL_TUTORS", "ALL_STUDENTS", "CLASS", "COURSE", "SPECIFIC_USERS"]},
+          "target_class_id": {"type": "string", "format": "uuid"},
+          "target_course_id": {"type": "string", "format": "uuid"},
+          "specific_user_ids": {"type": "array", "items": {"type": "string", "format": "uuid"}}
+        }
+      },
+      "Invoice": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "invoice_number": {"type": "string"},
+          "term_id": {"type": "string", "format": "uuid"},
+          "amount": {"type": "number"},
+          "currency": {"type": "string", "default": "NGN"},
+          "student_count": {"type": "integer"},
+          "rate_per_student": {"type": "number"},
+          "adjustments": {"type": "number"},
+          "total_amount": {"type": "number"},
+          "status": {"type": "string", "enum": ["DRAFT", "PENDING", "PAID", "OVERDUE", "VOID", "DISPUTED"]},
+          "due_date": {"type": "string", "format": "date"},
+          "paid_at": {"type": "string", "format": "date-time"},
+          "payment_reference": {"type": "string"},
+          "payment_method": {"type": "string"},
+          "notes": {"type": "string"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "Subscription": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "plan": {"type": "string", "enum": ["BASIC", "STANDARD", "PREMIUM"]},
+          "status": {"type": "string", "enum": ["ACTIVE", "SUSPENDED", "CANCELLED", "EXPIRED"]},
+          "rate_per_student": {"type": "number"},
+          "billing_cycle": {"type": "string", "enum": ["MONTHLY", "TERMLY", "YEARLY"]},
+          "current_period_start": {"type": "string", "format": "date"},
+          "current_period_end": {"type": "string", "format": "date"},
+          "trial_ends_at": {"type": "string", "format": "date-time"},
+          "cancelled_at": {"type": "string", "format": "date-time"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "AuditLog": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "user_id": {"type": "string", "format": "uuid"},
+          "user": {"$ref": "#/components/schemas/User"},
+          "action": {"type": "string"},
+          "resource_type": {"type": "string"},
+          "resource_id": {"type": "string", "format": "uuid"},
+          "old_values": {"type": "object"},
+          "new_values": {"type": "object"},
+          "ip_address": {"type": "string"},
+          "user_agent": {"type": "string"},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "PaginatedResult": {
+        "type": "object",
+        "properties": {
+          "total": {"type": "integer"},
+          "page": {"type": "integer"},
+          "limit": {"type": "integer"},
+          "total_pages": {"type": "integer"},
+          "has_next": {"type": "boolean"},
+          "has_prev": {"type": "boolean"},
+          "next_cursor": {"type": "string"},
+          "prev_cursor": {"type": "string"}
+        }
+      },
       "Error": {
         "type": "object",
         "required": ["error"],
