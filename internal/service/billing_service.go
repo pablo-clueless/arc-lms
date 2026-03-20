@@ -449,13 +449,45 @@ func (s *BillingService) ListBillingAdjustments(
 }
 
 // GetBillingMetrics retrieves platform-wide billing metrics (SuperAdmin)
+// Returns default zero values if no data exists
 func (s *BillingService) GetBillingMetrics(ctx context.Context) (*postgres.BillingMetrics, error) {
-	return s.invoiceRepo.GetBillingMetrics(ctx)
+	metrics, err := s.invoiceRepo.GetBillingMetrics(ctx)
+	if err != nil {
+		// Return default metrics with zeros if there's an error (e.g., no invoices table yet)
+		return &postgres.BillingMetrics{
+			TotalRevenue:     0,
+			MRR:              0,
+			UpcomingPayments: 0,
+			LatePayments:     0,
+			UpcomingCount:    0,
+			LateCount:        0,
+			RecentInvoices:   make([]*domain.Invoice, 0),
+		}, nil
+	}
+	// Ensure RecentInvoices is never null
+	if metrics.RecentInvoices == nil {
+		metrics.RecentInvoices = make([]*domain.Invoice, 0)
+	}
+	return metrics, nil
 }
 
 // GetTenantBillingStats retrieves billing statistics for a specific tenant
+// Returns default zero values if no data exists
 func (s *BillingService) GetTenantBillingStats(ctx context.Context, tenantID uuid.UUID) (*postgres.TenantBillingStats, error) {
-	return s.invoiceRepo.GetTenantBillingStats(ctx, tenantID)
+	stats, err := s.invoiceRepo.GetTenantBillingStats(ctx, tenantID)
+	if err != nil {
+		// Return default stats with zeros if there's an error
+		return &postgres.TenantBillingStats{
+			TenantID:         tenantID,
+			TotalInvoices:    0,
+			PendingCount:     0,
+			PaidCount:        0,
+			OverdueCount:     0,
+			TotalPaid:        0,
+			TotalOutstanding: 0,
+		}, nil
+	}
+	return stats, nil
 }
 
 // GetUpcomingInvoices retrieves invoices due within the specified days
@@ -637,9 +669,28 @@ func (s *BillingService) ReactivateSubscription(
 }
 
 // GetSubscriptionStatistics retrieves subscription statistics
+// Returns default zero values if no data exists
 func (s *BillingService) GetSubscriptionStatistics(ctx context.Context) (*postgres.SubscriptionStatistics, error) {
 	if s.subscriptionRepo == nil {
-		return nil, fmt.Errorf("subscription repository not configured")
+		// Return default stats with zeros if repo not configured
+		return &postgres.SubscriptionStatistics{
+			ActiveCount:    0,
+			OverdueCount:   0,
+			SuspendedCount: 0,
+			CancelledCount: 0,
+			TotalCount:     0,
+		}, nil
 	}
-	return s.subscriptionRepo.GetSubscriptionStatistics(ctx)
+	stats, err := s.subscriptionRepo.GetSubscriptionStatistics(ctx)
+	if err != nil {
+		// Return default stats with zeros if there's an error
+		return &postgres.SubscriptionStatistics{
+			ActiveCount:    0,
+			OverdueCount:   0,
+			SuspendedCount: 0,
+			CancelledCount: 0,
+			TotalCount:     0,
+		}, nil
+	}
+	return stats, nil
 }

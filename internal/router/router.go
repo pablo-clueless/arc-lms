@@ -105,6 +105,7 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 	meetingRepo := postgres.NewMeetingRepository(cfg.DB)
 	communicationRepo := postgres.NewCommunicationRepository(cfg.DB)
 	subscriptionRepo := postgres.NewSubscriptionRepository(cfg.DB)
+	systemConfigRepo := postgres.NewSystemConfigRepository(cfg.DB)
 
 	auditService := service.NewAuditService(auditRepo)
 	billingService := service.NewBillingService(invoiceRepo, subscriptionRepo, tenantRepo, enrollmentRepo, auditService)
@@ -157,6 +158,7 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 		courseRepo,
 		auditService,
 	)
+	systemConfigService := service.NewSystemConfigService(systemConfigRepo, auditService)
 
 	authHandler := handler.NewAuthHandler(authService)
 	userHandler := handler.NewUserHandler(userService)
@@ -176,6 +178,7 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 	meetingHandler := handler.NewMeetingHandler(meetingService)
 	communicationHandler := handler.NewCommunicationHandler(communicationService)
 	billingHandler := handler.NewBillingHandler(billingService)
+	systemConfigHandler := handler.NewSystemConfigHandler(systemConfigService)
 	wsHandler := handler.NewWebSocketHandler(wsHub, cfg.JWTManager, nil)
 
 	// WebSocket endpoint (outside v1 group, handles its own auth)
@@ -492,6 +495,20 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 				audit.GET("/logs", auditHandler.ListAuditLogs)
 				audit.GET("/logs/resource", auditHandler.GetResourceAuditTrail)
 				audit.GET("/logs/:id", auditHandler.GetAuditLog)
+			}
+
+			// System config routes (SUPER_ADMIN only)
+			systemConfigs := protected.Group("/system-configs")
+			{
+				systemConfigs.GET("", systemConfigHandler.ListSystemConfigs)
+				systemConfigs.POST("", systemConfigHandler.CreateSystemConfig)
+				systemConfigs.GET("/categories", systemConfigHandler.GetCategories)
+				systemConfigs.PUT("/bulk", systemConfigHandler.BulkUpdateSystemConfigs)
+				systemConfigs.GET("/category/:category", systemConfigHandler.ListSystemConfigsByCategory)
+				systemConfigs.GET("/key/:key", systemConfigHandler.GetSystemConfigByKey)
+				systemConfigs.GET("/:id", systemConfigHandler.GetSystemConfig)
+				systemConfigs.PUT("/:id", systemConfigHandler.UpdateSystemConfig)
+				systemConfigs.DELETE("/:id", systemConfigHandler.DeleteSystemConfig)
 			}
 
 			// WebSocket stats (admin only)

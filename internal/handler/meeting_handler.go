@@ -556,18 +556,9 @@ func (h *MeetingHandler) GetMeetingStatistics(c *gin.Context) {
 }
 
 // Helper method to get tenant and user IDs from context
+// For SuperAdmins, tenant_id may not exist - they are platform-level users
 func (h *MeetingHandler) getTenantAndUserID(c *gin.Context) (uuid.UUID, uuid.UUID, bool) {
-	tenantIDValue, exists := c.Get("tenant_id")
-	if !exists {
-		errors.Unauthorized(c, "tenant not found in token")
-		return uuid.Nil, uuid.Nil, false
-	}
-	tenantID, ok := tenantIDValue.(uuid.UUID)
-	if !ok {
-		errors.BadRequest(c, "invalid tenant ID format", nil)
-		return uuid.Nil, uuid.Nil, false
-	}
-
+	// Get user ID first (required for all users)
 	userIDValue, exists := c.Get("user_id")
 	if !exists {
 		errors.Unauthorized(c, "user not found in token")
@@ -579,21 +570,31 @@ func (h *MeetingHandler) getTenantAndUserID(c *gin.Context) (uuid.UUID, uuid.UUI
 		return uuid.Nil, uuid.Nil, false
 	}
 
+	// Check if user is SuperAdmin - they don't have tenant_id
+	role, _ := GetRoleFromContext(c)
+	if role == domain.RoleSuperAdmin {
+		return uuid.Nil, userID, true
+	}
+
+	// For non-SuperAdmin users, tenant_id is required
+	tenantIDValue, exists := c.Get("tenant_id")
+	if !exists {
+		errors.Unauthorized(c, "tenant not found in token")
+		return uuid.Nil, uuid.Nil, false
+	}
+	tenantID, ok := tenantIDValue.(uuid.UUID)
+	if !ok {
+		errors.BadRequest(c, "invalid tenant ID format", nil)
+		return uuid.Nil, uuid.Nil, false
+	}
+
 	return tenantID, userID, true
 }
 
 // Helper method to get user role from context
 func (h *MeetingHandler) getUserRole(c *gin.Context) domain.Role {
-	roleValue, exists := c.Get("role")
-	if !exists {
-		return domain.RoleStudent
-	}
-	role, ok := roleValue.(domain.Role)
+	role, ok := GetRoleFromContext(c)
 	if !ok {
-		roleStr, ok := roleValue.(string)
-		if ok {
-			return domain.Role(roleStr)
-		}
 		return domain.RoleStudent
 	}
 	return role

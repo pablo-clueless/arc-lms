@@ -626,18 +626,9 @@ func (h *AssessmentHandler) ListAssignmentSubmissions(c *gin.Context) {
 }
 
 // Helper method to get tenant and user IDs from context
+// For SuperAdmins, tenant_id may not exist - they are platform-level users
 func (h *AssessmentHandler) getTenantAndUserID(c *gin.Context) (uuid.UUID, uuid.UUID, bool) {
-	tenantIDValue, exists := c.Get("tenant_id")
-	if !exists {
-		errors.Unauthorized(c, "tenant not found in token")
-		return uuid.Nil, uuid.Nil, false
-	}
-	tenantID, ok := tenantIDValue.(uuid.UUID)
-	if !ok {
-		errors.BadRequest(c, "invalid tenant ID format", nil)
-		return uuid.Nil, uuid.Nil, false
-	}
-
+	// Get user ID first (required for all users)
 	userIDValue, exists := c.Get("user_id")
 	if !exists {
 		errors.Unauthorized(c, "user not found in token")
@@ -646,6 +637,24 @@ func (h *AssessmentHandler) getTenantAndUserID(c *gin.Context) (uuid.UUID, uuid.
 	userID, ok := userIDValue.(uuid.UUID)
 	if !ok {
 		errors.BadRequest(c, "invalid user ID format", nil)
+		return uuid.Nil, uuid.Nil, false
+	}
+
+	// Check if user is SuperAdmin - they don't have tenant_id
+	role, _ := GetRoleFromContext(c)
+	if role == domain.RoleSuperAdmin {
+		return uuid.Nil, userID, true
+	}
+
+	// For non-SuperAdmin users, tenant_id is required
+	tenantIDValue, exists := c.Get("tenant_id")
+	if !exists {
+		errors.Unauthorized(c, "tenant not found in token")
+		return uuid.Nil, uuid.Nil, false
+	}
+	tenantID, ok := tenantIDValue.(uuid.UUID)
+	if !ok {
+		errors.BadRequest(c, "invalid tenant ID format", nil)
 		return uuid.Nil, uuid.Nil, false
 	}
 

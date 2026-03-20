@@ -92,8 +92,7 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 	}
 
 	// Get role from context
-	roleValue, _ := c.Get("role")
-	role, _ := roleValue.(domain.Role)
+	role, _ := GetRoleFromContext(c)
 
 	// Get IP address
 	ipAddress := c.ClientIP()
@@ -141,8 +140,7 @@ func (h *UserHandler) InviteUser(c *gin.Context) {
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
 
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	if !validator.BindAndValidate(c, &req) {
 		return
@@ -256,8 +254,7 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 	requestingUserID, _ := c.Get("user_id")
 	requestingID, _ := requestingUserID.(uuid.UUID)
 
-	roleValue, _ := c.Get("role")
-	role, _ := roleValue.(domain.Role)
+	role, _ := GetRoleFromContext(c)
 
 	// Check authorization: user can access their own profile or ADMIN can access any in tenant
 	if id != requestingID && role != domain.RoleAdmin && role != domain.RoleSuperAdmin {
@@ -315,8 +312,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
 
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	if !validator.BindAndValidate(c, &req) {
 		return
@@ -371,8 +367,7 @@ func (h *UserHandler) DeactivateUser(c *gin.Context) {
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
 
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	// Get IP address
 	ipAddress := c.ClientIP()
@@ -412,8 +407,7 @@ func (h *UserHandler) ReactivateUser(c *gin.Context) {
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
 
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	// Get IP address
 	ipAddress := c.ClientIP()
@@ -492,8 +486,11 @@ func (h *UserHandler) CreateSuperAdmin(c *gin.Context) {
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
 
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, ok := GetRoleFromContext(c)
+	if !ok {
+		errors.Unauthorized(c, "invalid role in token")
+		return
+	}
 
 	// Only SUPER_ADMIN can create SuperAdmins
 	if actorRole != domain.RoleSuperAdmin {
@@ -532,8 +529,11 @@ func (h *UserHandler) CreateSuperAdmin(c *gin.Context) {
 // @Failure 403 {object} errors.ErrorResponse
 // @Router /superadmins [get]
 func (h *UserHandler) ListSuperAdmins(c *gin.Context) {
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, ok := GetRoleFromContext(c)
+	if !ok {
+		errors.Unauthorized(c, "invalid role in token")
+		return
+	}
 
 	// Only SUPER_ADMIN can list SuperAdmins
 	if actorRole != domain.RoleSuperAdmin {
@@ -578,8 +578,11 @@ func (h *UserHandler) GetSuperAdmin(c *gin.Context) {
 		return
 	}
 
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, ok := GetRoleFromContext(c)
+	if !ok {
+		errors.Unauthorized(c, "invalid role in token")
+		return
+	}
 
 	// Only SUPER_ADMIN can view SuperAdmins
 	if actorRole != domain.RoleSuperAdmin {
@@ -629,8 +632,11 @@ func (h *UserHandler) UpdateSuperAdmin(c *gin.Context) {
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
 
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, ok := GetRoleFromContext(c)
+	if !ok {
+		errors.Unauthorized(c, "invalid role in token")
+		return
+	}
 
 	// Only SUPER_ADMIN can update SuperAdmins
 	if actorRole != domain.RoleSuperAdmin {
@@ -676,8 +682,11 @@ func (h *UserHandler) DeleteSuperAdmin(c *gin.Context) {
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
 
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, ok := GetRoleFromContext(c)
+	if !ok {
+		errors.Unauthorized(c, "invalid role in token")
+		return
+	}
 
 	// Only SUPER_ADMIN can delete SuperAdmins
 	if actorRole != domain.RoleSuperAdmin {

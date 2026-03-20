@@ -3,7 +3,6 @@ package handler
 import (
 	"net/http"
 
-	"arc-lms/internal/domain"
 	"arc-lms/internal/pkg/errors"
 	"arc-lms/internal/pkg/validator"
 	"arc-lms/internal/repository"
@@ -43,8 +42,7 @@ func (h *CourseHandler) CreateCourse(c *gin.Context) {
 	tenantID, _ := tenantIDValue.(uuid.UUID)
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	if !validator.BindAndValidate(c, &req) {
 		return
@@ -147,8 +145,7 @@ func (h *CourseHandler) UpdateCourse(c *gin.Context) {
 
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	if !validator.BindAndValidate(c, &req) {
 		return
@@ -182,8 +179,7 @@ func (h *CourseHandler) DeleteCourse(c *gin.Context) {
 
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	if err := h.courseService.DeleteCourse(c.Request.Context(), id, actorID, actorRole, c.ClientIP()); err != nil {
 		errors.BadRequest(c, "failed to delete course", map[string]interface{}{"error": err.Error()})
@@ -216,8 +212,7 @@ func (h *CourseHandler) ReassignTutor(c *gin.Context) {
 
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	if !validator.BindAndValidate(c, &req) {
 		return

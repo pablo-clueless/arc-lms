@@ -42,6 +42,10 @@
       "description": "User management and profiles"
     },
     {
+      "name": "SuperAdmin",
+      "description": "SuperAdmin management - SUPER_ADMIN only"
+    },
+    {
       "name": "Sessions",
       "description": "Academic session (school year) management"
     },
@@ -104,6 +108,10 @@
     {
       "name": "Dashboard",
       "description": "Role-specific dashboard data"
+    },
+    {
+      "name": "SystemConfig",
+      "description": "Platform system configuration management - SUPER_ADMIN only"
     }
   ],
   "paths": {
@@ -1052,6 +1060,245 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/superadmins": {
+      "get": {
+        "tags": ["SuperAdmin"],
+        "summary": "List all SuperAdmins",
+        "description": "Returns a paginated list of all SuperAdmin users. SUPER_ADMIN only.",
+        "operationId": "listSuperAdmins",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"$ref": "#/components/parameters/Page"},
+          {"$ref": "#/components/parameters/Limit"}
+        ],
+        "responses": {
+          "200": {
+            "description": "List of SuperAdmins",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {"$ref": "#/components/schemas/PaginatedResponse"},
+                    {
+                      "type": "object",
+                      "properties": {
+                        "users": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/User"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "tags": ["SuperAdmin"],
+        "summary": "Create a new SuperAdmin",
+        "description": "Creates a new SuperAdmin user. SUPER_ADMIN only. Supports idempotency.",
+        "operationId": "createSuperAdmin",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSuperAdminRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "SuperAdmin created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/superadmins/{id}": {
+      "get": {
+        "tags": ["SuperAdmin"],
+        "summary": "Get SuperAdmin by ID",
+        "description": "Returns details of a specific SuperAdmin. SUPER_ADMIN only.",
+        "operationId": "getSuperAdmin",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "SuperAdmin UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SuperAdmin details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "tags": ["SuperAdmin"],
+        "summary": "Update SuperAdmin",
+        "description": "Updates a SuperAdmin's profile. SUPER_ADMIN only. Supports idempotency.",
+        "operationId": "updateSuperAdmin",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "SuperAdmin UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "SuperAdmin updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["SuperAdmin"],
+        "summary": "Delete SuperAdmin",
+        "description": "Deletes a SuperAdmin user. SUPER_ADMIN only. Cannot delete yourself.",
+        "operationId": "deleteSuperAdmin",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "SuperAdmin UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SuperAdmin deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "SuperAdmin deleted successfully"
+                    }
+                  }
                 }
               }
             }
@@ -2301,6 +2548,340 @@
         }
       }
     },
+    "/system-configs": {
+      "get": {
+        "tags": ["SystemConfig"],
+        "summary": "List system configs",
+        "description": "List all platform system configurations. SUPER_ADMIN only.",
+        "operationId": "listSystemConfigs",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"$ref": "#/components/parameters/Limit"},
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Filter by category",
+            "schema": {
+              "type": "string",
+              "enum": ["general", "maintenance", "billing", "email", "security", "features", "rate_limit", "defaults"]
+            }
+          },
+          {
+            "name": "mask_sensitive",
+            "in": "query",
+            "description": "Mask sensitive config values",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of system configs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "configs": {
+                      "type": "array",
+                      "items": {"$ref": "#/components/schemas/SystemConfig"}
+                    },
+                    "pagination": {"$ref": "#/components/schemas/PaginatedResult"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      },
+      "post": {
+        "tags": ["SystemConfig"],
+        "summary": "Create system config",
+        "description": "Create a new platform system configuration. SUPER_ADMIN only.",
+        "operationId": "createSystemConfig",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/CreateSystemConfigRequest"}
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "System config created",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/SystemConfig"}
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "409": {"$ref": "#/components/responses/Conflict"}
+        }
+      }
+    },
+    "/system-configs/categories": {
+      "get": {
+        "tags": ["SystemConfig"],
+        "summary": "Get config categories",
+        "description": "Get list of all available config categories. SUPER_ADMIN only.",
+        "operationId": "getSystemConfigCategories",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "List of categories",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "categories": {
+                      "type": "array",
+                      "items": {"type": "string"}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/system-configs/bulk": {
+      "put": {
+        "tags": ["SystemConfig"],
+        "summary": "Bulk update configs",
+        "description": "Update multiple system configurations at once. SUPER_ADMIN only.",
+        "operationId": "bulkUpdateSystemConfigs",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/BulkUpdateConfigRequest"},
+                "maxItems": 50
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Configs updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {"type": "string"},
+                    "count": {"type": "integer"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/system-configs/category/{category}": {
+      "get": {
+        "tags": ["SystemConfig"],
+        "summary": "List configs by category",
+        "description": "List all system configurations for a specific category. SUPER_ADMIN only.",
+        "operationId": "listSystemConfigsByCategory",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "category",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["general", "maintenance", "billing", "email", "security", "features", "rate_limit", "defaults"]
+            }
+          },
+          {
+            "name": "mask_sensitive",
+            "in": "query",
+            "description": "Mask sensitive config values",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of configs in category",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "category": {"type": "string"},
+                    "configs": {
+                      "type": "array",
+                      "items": {"$ref": "#/components/schemas/SystemConfig"}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/system-configs/key/{key}": {
+      "get": {
+        "tags": ["SystemConfig"],
+        "summary": "Get config by key",
+        "description": "Get a system configuration by its key. SUPER_ADMIN only.",
+        "operationId": "getSystemConfigByKey",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "Config key (e.g., platform.name, billing.currency)",
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "System config details",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/SystemConfig"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/system-configs/{id}": {
+      "get": {
+        "tags": ["SystemConfig"],
+        "summary": "Get config by ID",
+        "description": "Get a system configuration by its ID. SUPER_ADMIN only.",
+        "operationId": "getSystemConfig",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "format": "uuid"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "System config details",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/SystemConfig"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "put": {
+        "tags": ["SystemConfig"],
+        "summary": "Update config",
+        "description": "Update a system configuration. SUPER_ADMIN only.",
+        "operationId": "updateSystemConfig",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "format": "uuid"}
+          },
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/UpdateSystemConfigRequest"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Config updated",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/SystemConfig"}
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "delete": {
+        "tags": ["SystemConfig"],
+        "summary": "Delete config",
+        "description": "Delete a system configuration. SUPER_ADMIN only.",
+        "operationId": "deleteSystemConfig",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "format": "uuid"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Config deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {"type": "string", "example": "system config deleted successfully"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
     "/notifications": {
       "get": {
         "tags": ["Notifications"],
@@ -3489,6 +4070,119 @@
           "created_at": {"type": "string", "format": "date-time"}
         }
       },
+      "SystemConfig": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "key": {
+            "type": "string",
+            "description": "Unique configuration key (e.g., platform.name, billing.currency)"
+          },
+          "value": {
+            "description": "JSON value for the configuration",
+            "oneOf": [
+              {"type": "string"},
+              {"type": "number"},
+              {"type": "boolean"},
+              {"type": "array"},
+              {"type": "object"}
+            ]
+          },
+          "description": {"type": "string"},
+          "category": {
+            "type": "string",
+            "enum": ["general", "maintenance", "billing", "email", "security", "features", "rate_limit", "defaults"]
+          },
+          "is_sensitive": {
+            "type": "boolean",
+            "description": "If true, value is masked in API responses"
+          },
+          "created_by": {"type": "string", "format": "uuid"},
+          "updated_by": {"type": "string", "format": "uuid"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "CreateSystemConfigRequest": {
+        "type": "object",
+        "required": ["key", "value", "category"],
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Unique configuration key"
+          },
+          "value": {
+            "description": "JSON value for the configuration",
+            "oneOf": [
+              {"type": "string"},
+              {"type": "number"},
+              {"type": "boolean"},
+              {"type": "array"},
+              {"type": "object"}
+            ]
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Description of the configuration"
+          },
+          "category": {
+            "type": "string",
+            "enum": ["general", "maintenance", "billing", "email", "security", "features", "rate_limit", "defaults"]
+          },
+          "is_sensitive": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, value will be masked in API responses"
+          }
+        }
+      },
+      "UpdateSystemConfigRequest": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "description": "New JSON value for the configuration",
+            "oneOf": [
+              {"type": "string"},
+              {"type": "number"},
+              {"type": "boolean"},
+              {"type": "array"},
+              {"type": "object"}
+            ]
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "category": {
+            "type": "string",
+            "enum": ["general", "maintenance", "billing", "email", "security", "features", "rate_limit", "defaults"]
+          },
+          "is_sensitive": {"type": "boolean"}
+        }
+      },
+      "BulkUpdateConfigRequest": {
+        "type": "object",
+        "required": ["key", "value"],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Configuration key to update"
+          },
+          "value": {
+            "description": "New JSON value",
+            "oneOf": [
+              {"type": "string"},
+              {"type": "number"},
+              {"type": "boolean"},
+              {"type": "array"},
+              {"type": "object"}
+            ]
+          }
+        }
+      },
       "PaginatedResult": {
         "type": "object",
         "properties": {
@@ -4076,6 +4770,53 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "CreateSuperAdminRequest": {
+        "type": "object",
+        "required": ["email", "password", "first_name", "last_name"],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Email address for the new SuperAdmin"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "minLength": 8,
+            "description": "Password (minimum 8 characters)"
+          },
+          "first_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "First name"
+          },
+          "last_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Last name"
+          },
+          "middle_name": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Middle name (optional)"
+          },
+          "phone": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 20,
+            "description": "Phone number (optional)"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of additional permissions (optional)"
           }
         }
       },

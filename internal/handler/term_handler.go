@@ -52,8 +52,7 @@ func (h *TermHandler) CreateTerm(c *gin.Context) {
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
 
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	if !validator.BindAndValidate(c, &req) {
 		return
@@ -177,8 +176,7 @@ func (h *TermHandler) UpdateTerm(c *gin.Context) {
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
 
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	if !validator.BindAndValidate(c, &req) {
 		return
@@ -223,8 +221,7 @@ func (h *TermHandler) DeleteTerm(c *gin.Context) {
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
 
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	// Get IP address
 	ipAddress := c.ClientIP()
@@ -264,8 +261,7 @@ func (h *TermHandler) ActivateTerm(c *gin.Context) {
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
 
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	// Get IP address
 	ipAddress := c.ClientIP()
@@ -306,8 +302,7 @@ func (h *TermHandler) CompleteTerm(c *gin.Context) {
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
 
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	// Get IP address
 	ipAddress := c.ClientIP()

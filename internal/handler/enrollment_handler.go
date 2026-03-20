@@ -43,8 +43,7 @@ func (h *EnrollmentHandler) EnrollStudent(c *gin.Context) {
 	tenantID, _ := tenantIDValue.(uuid.UUID)
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	if !validator.BindAndValidate(c, &req) {
 		return
@@ -149,8 +148,7 @@ func (h *EnrollmentHandler) TransferStudent(c *gin.Context) {
 
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	if !validator.BindAndValidate(c, &req) {
 		return
@@ -190,8 +188,7 @@ func (h *EnrollmentHandler) WithdrawStudent(c *gin.Context) {
 
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	if !validator.BindAndValidate(c, &req) {
 		return
@@ -231,8 +228,7 @@ func (h *EnrollmentHandler) SuspendEnrollment(c *gin.Context) {
 
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	if !validator.BindAndValidate(c, &req) {
 		return
@@ -266,8 +262,7 @@ func (h *EnrollmentHandler) ReactivateEnrollment(c *gin.Context) {
 
 	actorIDValue, _ := c.Get("user_id")
 	actorID, _ := actorIDValue.(uuid.UUID)
-	roleValue, _ := c.Get("role")
-	actorRole, _ := roleValue.(domain.Role)
+	actorRole, _ := GetRoleFromContext(c)
 
 	enrollment, err := h.enrollmentService.ReactivateEnrollment(c.Request.Context(), id, actorID, actorRole, c.ClientIP())
 	if err != nil {

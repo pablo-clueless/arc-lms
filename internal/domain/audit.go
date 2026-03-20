@@ -106,6 +106,12 @@ const (
 	AuditActionEmailScheduled    AuditAction = "EMAIL_SCHEDULED"
 	AuditActionEmailCancelled    AuditAction = "EMAIL_CANCELLED"
 	AuditActionNotificationSent  AuditAction = "NOTIFICATION_SENT"
+
+	// System config actions
+	AuditActionSystemConfigCreated     AuditAction = "SYSTEM_CONFIG_CREATED"
+	AuditActionSystemConfigUpdated     AuditAction = "SYSTEM_CONFIG_UPDATED"
+	AuditActionSystemConfigDeleted     AuditAction = "SYSTEM_CONFIG_DELETED"
+	AuditActionSystemConfigBulkUpdated AuditAction = "SYSTEM_CONFIG_BULK_UPDATED"
 )
 
 // AuditResourceType represents the type of resource being audited
@@ -133,6 +139,7 @@ const (
 	AuditResourceSubscription AuditResourceType = "SUBSCRIPTION"
 	AuditResourceEmail        AuditResourceType = "EMAIL"
 	AuditResourceNotification AuditResourceType = "NOTIFICATION"
+	AuditResourceSystemConfig AuditResourceType = "SYSTEM_CONFIG"
 )
 
 // AuditLog represents an immutable audit trail entry
