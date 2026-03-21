@@ -12,7 +12,7 @@ GOBUILD=$(GOCMD) build
 GORUN=$(GOCMD) run
 GOTEST=$(GOCMD) test
 GOMOD=$(GOCMD) mod
-BINARY_NAME=lms-api
+BINARY_NAME=arc-lms
 MAIN_PATH=./cmd/api
 
 # Database URL (override with environment variable)
@@ -83,7 +83,7 @@ migrate-create:
 
 # Build Docker image
 docker-build:
-	docker build -f build/docker/Dockerfile -t lms-api .
+	docker build -f build/docker/Dockerfile -t arc-lms .
 
 # Start Docker containers
 docker-up:
