@@ -256,37 +256,75 @@ func (r *UserRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+// UserListFilters contains filters for listing users
+type UserListFilters struct {
+	TenantID   *uuid.UUID
+	Role       *domain.Role
+	Status     *domain.UserStatus
+	SearchTerm *string
+	ClassID    *uuid.UUID // Filter by class enrollment
+	SessionID  *uuid.UUID // Filter by session enrollment
+}
+
 // List retrieves users with filters and pagination
-func (r *UserRepository) List(ctx context.Context, tenantID *uuid.UUID, role *domain.Role, status *domain.UserStatus, params repository.PaginationParams) ([]*domain.User, int, error) {
+func (r *UserRepository) List(ctx context.Context, filters *UserListFilters, params repository.PaginationParams) ([]*domain.User, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
 		return nil, 0, err
 	}
 
-	// Build WHERE clause
+	// Determine if we need to join with enrollments
+	needsEnrollmentJoin := filters != nil && (filters.ClassID != nil || filters.SessionID != nil)
+
+	// Build FROM and WHERE clauses
+	fromClause := "FROM users u"
 	whereClause := "WHERE 1=1"
 	args := []interface{}{}
 	argIndex := 1
 
-	if tenantID != nil {
-		whereClause += fmt.Sprintf(" AND tenant_id = $%d", argIndex)
-		args = append(args, *tenantID)
-		argIndex++
+	if needsEnrollmentJoin {
+		fromClause = "FROM users u INNER JOIN enrollments e ON u.id = e.student_id AND e.status = 'ACTIVE'"
 	}
 
-	if role != nil {
-		whereClause += fmt.Sprintf(" AND role = $%d", argIndex)
-		args = append(args, *role)
-		argIndex++
-	}
+	if filters != nil {
+		if filters.TenantID != nil {
+			whereClause += fmt.Sprintf(" AND u.tenant_id = $%d", argIndex)
+			args = append(args, *filters.TenantID)
+			argIndex++
+		}
 
-	if status != nil {
-		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
-		args = append(args, *status)
-		argIndex++
+		if filters.Role != nil {
+			whereClause += fmt.Sprintf(" AND u.role = $%d", argIndex)
+			args = append(args, *filters.Role)
+			argIndex++
+		}
+
+		if filters.Status != nil {
+			whereClause += fmt.Sprintf(" AND u.status = $%d", argIndex)
+			args = append(args, *filters.Status)
+			argIndex++
+		}
+
+		if filters.SearchTerm != nil && *filters.SearchTerm != "" {
+			whereClause += fmt.Sprintf(" AND (u.first_name ILIKE $%d OR u.last_name ILIKE $%d OR u.email ILIKE $%d)", argIndex, argIndex, argIndex)
+			args = append(args, "%"+*filters.SearchTerm+"%")
+			argIndex++
+		}
+
+		if filters.ClassID != nil {
+			whereClause += fmt.Sprintf(" AND e.class_id = $%d", argIndex)
+			args = append(args, *filters.ClassID)
+			argIndex++
+		}
+
+		if filters.SessionID != nil {
+			whereClause += fmt.Sprintf(" AND e.session_id = $%d", argIndex)
+			args = append(args, *filters.SessionID)
+			argIndex++
+		}
 	}
 
 	// Get total count
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM users %s", whereClause)
+	countQuery := fmt.Sprintf("SELECT COUNT(DISTINCT u.id) %s %s", fromClause, whereClause)
 	var total int
 	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, repository.ParseError(err)
@@ -294,19 +332,19 @@ func (r *UserRepository) List(ctx context.Context, tenantID *uuid.UUID, role *do
 
 	// Get paginated results
 	query := fmt.Sprintf(`
-		SELECT
-			id, tenant_id, role, email, password_hash,
-			first_name, last_name, middle_name, profile_photo, phone,
-			status, permissions, notification_preferences,
-			last_login_at, password_reset_token, password_reset_expiry,
-			invitation_token, invitation_expiry,
-			deactivated_at, deactivation_reason,
-			created_at, updated_at
-		FROM users
+		SELECT DISTINCT
+			u.id, u.tenant_id, u.role, u.email, u.password_hash,
+			u.first_name, u.last_name, u.middle_name, u.profile_photo, u.phone,
+			u.status, u.permissions, u.notification_preferences,
+			u.last_login_at, u.password_reset_token, u.password_reset_expiry,
+			u.invitation_token, u.invitation_expiry,
+			u.deactivated_at, u.deactivation_reason,
+			u.created_at, u.updated_at
 		%s
-		ORDER BY created_at %s
+		%s
+		ORDER BY u.created_at %s
 		LIMIT $%d OFFSET $%d
-	`, whereClause, params.SortOrder, argIndex, argIndex+1)
+	`, fromClause, whereClause, params.SortOrder, argIndex, argIndex+1)
 
 	args = append(args, params.Limit, params.Offset())
 

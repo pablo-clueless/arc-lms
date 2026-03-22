@@ -143,7 +143,7 @@ func (s *DashboardService) getSuperAdminDashboard(ctx context.Context) (*SuperAd
 	}
 
 	// Get all users (across all tenants)
-	allUsers, _, err := s.userRepo.List(ctx, nil, nil, nil, paginationParams)
+	allUsers, _, err := s.userRepo.List(ctx, nil, paginationParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list users: %w", err)
 	}
@@ -211,7 +211,7 @@ func (s *DashboardService) getAdminDashboard(ctx context.Context, tenantID uuid.
 		Limit:     1000, // High limit for dashboard
 		SortOrder: "DESC",
 	}
-	users, _, err := s.userRepo.List(ctx, &tenantID, nil, nil, paginationParams)
+	users, _, err := s.userRepo.List(ctx, &postgres.UserListFilters{TenantID: &tenantID}, paginationParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list users: %w", err)
 	}

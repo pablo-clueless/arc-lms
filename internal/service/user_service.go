@@ -68,6 +68,8 @@ type UserFilters struct {
 	Role       *domain.Role       `json:"role,omitempty"`
 	Status     *domain.UserStatus `json:"status,omitempty"`
 	SearchTerm *string            `json:"search_term,omitempty"`
+	ClassID    *uuid.UUID         `json:"class_id,omitempty"`    // Filter students by class enrollment
+	SessionID  *uuid.UUID         `json:"session_id,omitempty"`  // Filter students by session enrollment
 }
 
 // ChangePasswordRequest represents password change data
@@ -258,14 +260,19 @@ func (s *UserService) ListUsers(
 	filters *UserFilters,
 	params repository.PaginationParams,
 ) ([]*domain.User, *repository.PaginatedResult, error) {
-	var role *domain.Role
-	var status *domain.UserStatus
-	if filters != nil {
-		role = filters.Role
-		status = filters.Status
+	repoFilters := &postgres.UserListFilters{
+		TenantID: &tenantID,
 	}
 
-	users, total, err := s.userRepo.List(ctx, &tenantID, role, status, params)
+	if filters != nil {
+		repoFilters.Role = filters.Role
+		repoFilters.Status = filters.Status
+		repoFilters.SearchTerm = filters.SearchTerm
+		repoFilters.ClassID = filters.ClassID
+		repoFilters.SessionID = filters.SessionID
+	}
+
+	users, total, err := s.userRepo.List(ctx, repoFilters, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list users: %w", err)
 	}
@@ -595,7 +602,11 @@ func (s *UserService) ListSuperAdmins(
 	}
 
 	role := domain.RoleSuperAdmin
-	users, total, err := s.userRepo.List(ctx, nil, &role, nil, params)
+	filters := &postgres.UserListFilters{
+		Role: &role,
+	}
+
+	users, total, err := s.userRepo.List(ctx, filters, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list SuperAdmins: %w", err)
 	}
@@ -712,7 +723,8 @@ func (s *UserService) DeleteSuperAdmin(
 
 	// Check that there will be at least one SUPER_ADMIN left
 	role := domain.RoleSuperAdmin
-	superAdmins, _, err := s.userRepo.List(ctx, nil, &role, nil, repository.PaginationParams{Page: 1, Limit: 10})
+	filters := &postgres.UserListFilters{Role: &role}
+	superAdmins, _, err := s.userRepo.List(ctx, filters, repository.PaginationParams{Page: 1, Limit: 10})
 	if err != nil {
 		return fmt.Errorf("failed to count SuperAdmins: %w", err)
 	}

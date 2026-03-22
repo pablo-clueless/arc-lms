@@ -18,6 +18,7 @@ type EnrollmentService struct {
 	classRepo      *postgres.ClassRepository
 	userRepo       *postgres.UserRepository
 	sessionRepo    *postgres.SessionRepository
+	termRepo       *postgres.TermRepository
 	auditService   *AuditService
 }
 
@@ -27,6 +28,7 @@ func NewEnrollmentService(
 	classRepo *postgres.ClassRepository,
 	userRepo *postgres.UserRepository,
 	sessionRepo *postgres.SessionRepository,
+	termRepo *postgres.TermRepository,
 	auditService *AuditService,
 ) *EnrollmentService {
 	return &EnrollmentService{
@@ -34,6 +36,7 @@ func NewEnrollmentService(
 		classRepo:      classRepo,
 		userRepo:       userRepo,
 		sessionRepo:    sessionRepo,
+		termRepo:       termRepo,
 		auditService:   auditService,
 	}
 }
@@ -49,6 +52,24 @@ type EnrollStudentRequest struct {
 type TransferStudentRequest struct {
 	NewClassID uuid.UUID `json:"new_class_id" validate:"required,uuid"`
 	Reason     string    `json:"reason" validate:"required,min=10,max=500"`
+}
+
+// CreateAndEnrollStudentRequest represents data for creating a new student and enrolling them
+type CreateAndEnrollStudentRequest struct {
+	// Student details
+	Email      string  `json:"email" validate:"required,email"`
+	FirstName  string  `json:"first_name" validate:"required,min=1,max=100"`
+	LastName   string  `json:"last_name" validate:"required,min=1,max=100"`
+	MiddleName *string `json:"middle_name,omitempty" validate:"omitempty,max=100"`
+	Phone      *string `json:"phone,omitempty" validate:"omitempty,min=10,max=20"`
+	// Enrollment details - only class_id is required
+	ClassID uuid.UUID `json:"class_id" validate:"required,uuid"`
+}
+
+// CreateAndEnrollStudentResponse contains both the created user and enrollment
+type CreateAndEnrollStudentResponse struct {
+	User       *domain.User       `json:"user"`
+	Enrollment *domain.Enrollment `json:"enrollment"`
 }
 
 // EnrollStudent enrolls a student in a class (enforces BR-003)
@@ -125,6 +146,119 @@ func (s *EnrollmentService) EnrollStudent(
 	)
 
 	return enrollment, nil
+}
+
+// CreateAndEnrollStudent creates a new student user and enrolls them in a class
+// Only requires class_id - automatically uses the active session and term
+func (s *EnrollmentService) CreateAndEnrollStudent(
+	ctx context.Context,
+	tenantID uuid.UUID,
+	req *CreateAndEnrollStudentRequest,
+	actorID uuid.UUID,
+	actorRole domain.Role,
+	ipAddress string,
+) (*CreateAndEnrollStudentResponse, error) {
+	// Check if email already exists
+	existingUser, err := s.userRepo.GetByEmail(ctx, req.Email)
+	if err == nil && existingUser != nil {
+		return nil, fmt.Errorf("user with this email already exists")
+	}
+
+	// Verify class exists and belongs to tenant
+	class, err := s.classRepo.Get(ctx, req.ClassID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get class: %w", err)
+	}
+	if class.TenantID != tenantID {
+		return nil, fmt.Errorf("class does not belong to this tenant")
+	}
+
+	// Get the active session for this tenant
+	activeSession, err := s.sessionRepo.GetActiveSession(ctx, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("no active session found: %w", err)
+	}
+
+	// Verify there's an active term (enrollment requires an active term)
+	_, err = s.termRepo.GetActiveTerm(ctx, activeSession.ID)
+	if err != nil {
+		return nil, fmt.Errorf("no active term found: %w", err)
+	}
+
+	now := time.Now()
+
+	// Create the student user
+	student := &domain.User{
+		ID:        uuid.New(),
+		TenantID:  &tenantID,
+		Role:      domain.RoleStudent,
+		Email:     req.Email,
+		FirstName: req.FirstName,
+		LastName:  req.LastName,
+		MiddleName: req.MiddleName,
+		Phone:     req.Phone,
+		Status:    domain.UserStatusActive,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	if err := s.userRepo.Create(ctx, student); err != nil {
+		return nil, fmt.Errorf("failed to create student: %w", err)
+	}
+
+	// Audit log for user creation
+	_ = s.auditService.LogAction(
+		ctx,
+		domain.AuditActionUserCreated,
+		actorID,
+		actorRole,
+		&tenantID,
+		domain.AuditResourceUser,
+		student.ID,
+		nil,
+		student,
+		ipAddress,
+	)
+
+	// Create the enrollment
+	enrollment := &domain.Enrollment{
+		ID:             uuid.New(),
+		TenantID:       tenantID,
+		StudentID:      student.ID,
+		ClassID:        req.ClassID,
+		SessionID:      activeSession.ID,
+		Status:         domain.EnrollmentStatusActive,
+		EnrollmentDate: now,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+
+	if err := s.enrollmentRepo.Enroll(ctx, enrollment, nil); err != nil {
+		// TODO: Consider rolling back user creation in production
+		return nil, fmt.Errorf("failed to create enrollment: %w", err)
+	}
+
+	// Audit log for enrollment
+	_ = s.auditService.LogAction(
+		ctx,
+		domain.AuditActionEnrollmentCreated,
+		actorID,
+		actorRole,
+		&tenantID,
+		domain.AuditResourceEnrollment,
+		enrollment.ID,
+		nil,
+		enrollment,
+		ipAddress,
+	)
+
+	// Remove sensitive fields
+	student.PasswordHash = ""
+
+	return &CreateAndEnrollStudentResponse{
+		User:       student,
+		Enrollment: enrollment,
+	}, nil
 }
 
 // GetEnrollment gets an enrollment by ID

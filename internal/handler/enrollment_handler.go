@@ -58,6 +58,40 @@ func (h *EnrollmentHandler) EnrollStudent(c *gin.Context) {
 	c.JSON(http.StatusCreated, enrollment)
 }
 
+// CreateAndEnrollStudent godoc
+// @Summary Create and enroll student
+// @Description Create a new student user and enroll them in a class (ADMIN only)
+// @Description Only requires class_id - automatically uses active session and term
+// @Tags Enrollments
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body service.CreateAndEnrollStudentRequest true "Student and enrollment data"
+// @Success 201 {object} service.CreateAndEnrollStudentResponse
+// @Failure 400 {object} errors.ErrorResponse
+// @Router /enrollments/create-student [post]
+func (h *EnrollmentHandler) CreateAndEnrollStudent(c *gin.Context) {
+	var req service.CreateAndEnrollStudentRequest
+
+	tenantIDValue, _ := c.Get("tenant_id")
+	tenantID, _ := tenantIDValue.(uuid.UUID)
+	actorIDValue, _ := c.Get("user_id")
+	actorID, _ := actorIDValue.(uuid.UUID)
+	actorRole, _ := GetRoleFromContext(c)
+
+	if !validator.BindAndValidate(c, &req) {
+		return
+	}
+
+	response, err := h.enrollmentService.CreateAndEnrollStudent(c.Request.Context(), tenantID, &req, actorID, actorRole, c.ClientIP())
+	if err != nil {
+		errors.BadRequest(c, "failed to create and enroll student", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, response)
+}
+
 // ListEnrollments godoc
 // @Summary List enrollments
 // @Description List all enrollments for tenant

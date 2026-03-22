@@ -220,6 +220,7 @@ func (s *SessionService) ListSessions(
 }
 
 // ActivateSession activates a session (enforces BR-007: one active per tenant)
+// When activating a session, all other non-draft sessions are archived
 func (s *SessionService) ActivateSession(
 	ctx context.Context,
 	id uuid.UUID,
@@ -233,13 +234,31 @@ func (s *SessionService) ActivateSession(
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 
-	// Check if there's already an active session for this tenant (BR-007)
+	// Archive any currently active sessions (except drafts)
 	activeSession, err := s.sessionRepo.GetActiveSession(ctx, session.TenantID)
 	if err != nil && err != repository.ErrNotFound {
 		return nil, fmt.Errorf("failed to check active session: %w", err)
 	}
 	if activeSession != nil && activeSession.ID != session.ID {
-		return nil, fmt.Errorf("another session is already active for this tenant (BR-007)")
+		// Archive the currently active session
+		activeSession.Archive()
+		if err := s.sessionRepo.Update(ctx, activeSession, nil); err != nil {
+			return nil, fmt.Errorf("failed to archive previous active session: %w", err)
+		}
+
+		// Audit log for archiving
+		_ = s.auditService.LogAction(
+			ctx,
+			domain.AuditActionSessionArchived,
+			actorID,
+			actorRole,
+			&activeSession.TenantID,
+			domain.AuditResourceSession,
+			activeSession.ID,
+			nil,
+			activeSession,
+			ipAddress,
+		)
 	}
 
 	// Store before state

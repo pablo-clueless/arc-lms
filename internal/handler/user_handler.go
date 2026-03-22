@@ -170,9 +170,11 @@ func (h *UserHandler) InviteUser(c *gin.Context) {
 // @Tags Users
 // @Security BearerAuth
 // @Produce json
-// @Param role query string false "Filter by role"
-// @Param status query string false "Filter by status"
+// @Param role query string false "Filter by role (ADMIN, TUTOR, STUDENT)"
+// @Param status query string false "Filter by status (ACTIVE, PENDING, DEACTIVATED)"
 // @Param search query string false "Search by name or email"
+// @Param class_id query string false "Filter students by class enrollment"
+// @Param session_id query string false "Filter students by session enrollment"
 // @Param page query int false "Page number" default(1)
 // @Param limit query int false "Items per page" default(20)
 // @Success 200 {object} map[string]interface{}
@@ -205,6 +207,16 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 	}
 	if search := c.Query("search"); search != "" {
 		filters.SearchTerm = &search
+	}
+	if classIDStr := c.Query("class_id"); classIDStr != "" {
+		if classID, err := uuid.Parse(classIDStr); err == nil {
+			filters.ClassID = &classID
+		}
+	}
+	if sessionIDStr := c.Query("session_id"); sessionIDStr != "" {
+		if sessionID, err := uuid.Parse(sessionIDStr); err == nil {
+			filters.SessionID = &sessionID
+		}
 	}
 
 	// Build pagination params

@@ -114,7 +114,7 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 	termService := service.NewTermService(termRepo, sessionRepo, enrollmentRepo, auditService, billingService)
 	classService := service.NewClassService(classRepo, sessionRepo, auditService)
 	courseService := service.NewCourseService(courseRepo, classRepo, userRepo, auditService)
-	enrollmentService := service.NewEnrollmentService(enrollmentRepo, classRepo, userRepo, sessionRepo, auditService)
+	enrollmentService := service.NewEnrollmentService(enrollmentRepo, classRepo, userRepo, sessionRepo, termRepo, auditService)
 	dashboardService := service.NewDashboardService(tenantRepo, userRepo, sessionRepo, classRepo, courseRepo, enrollmentRepo, invoiceRepo)
 	notificationService := service.NewNotificationService(notificationRepo, userRepo, wsHub)
 	assessmentService := service.NewAssessmentService(quizRepo, assignmentRepo, courseRepo, auditService)
@@ -322,6 +322,7 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 			{
 				enrollments.GET("", enrollmentHandler.ListEnrollments)
 				enrollments.POST("", enrollmentHandler.EnrollStudent)
+				enrollments.POST("/create-student", enrollmentHandler.CreateAndEnrollStudent)
 				enrollments.GET("/:id", enrollmentHandler.GetEnrollment)
 				enrollments.POST("/:id/transfer", enrollmentHandler.TransferStudent)
 				enrollments.POST("/:id/withdraw", enrollmentHandler.WithdrawStudent)
