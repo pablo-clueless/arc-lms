@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"arc-lms/internal/domain"
@@ -24,6 +25,7 @@ type TimetableService struct {
 	classRepo       *postgres.ClassRepository
 	termRepo        *postgres.TermRepository
 	tenantRepo      *postgres.TenantRepository
+	userRepo        *postgres.UserRepository
 	auditService    *AuditService
 }
 
@@ -37,6 +39,7 @@ func NewTimetableService(
 	classRepo *postgres.ClassRepository,
 	termRepo *postgres.TermRepository,
 	tenantRepo *postgres.TenantRepository,
+	userRepo *postgres.UserRepository,
 	auditService *AuditService,
 ) *TimetableService {
 	return &TimetableService{
@@ -48,6 +51,7 @@ func NewTimetableService(
 		classRepo:       classRepo,
 		termRepo:        termRepo,
 		tenantRepo:      tenantRepo,
+		userRepo:        userRepo,
 		auditService:    auditService,
 	}
 }
@@ -83,17 +87,99 @@ func DefaultTimetableConfig() *TimetableConfig {
 	}
 }
 
-// GenerateTimetableRequest represents a request to generate a timetable
-type GenerateTimetableRequest struct {
-	ClassID uuid.UUID `json:"class_id" validate:"required,uuid"`
-	TermID  uuid.UUID `json:"term_id" validate:"required,uuid"`
-	Notes   *string   `json:"notes,omitempty" validate:"omitempty,max=1000"`
+// parseDayOfWeek converts a day name string to domain.DayOfWeek
+func parseDayOfWeek(day string) (domain.DayOfWeek, error) {
+	dayMap := map[string]domain.DayOfWeek{
+		"monday":    domain.DayMonday,
+		"tuesday":   domain.DayTuesday,
+		"wednesday": domain.DayWednesday,
+		"thursday":  domain.DayThursday,
+		"friday":    domain.DayFriday,
+		"saturday":  domain.DaySaturday,
+	}
+
+	// Convert to lowercase for case-insensitive matching
+	normalizedDay := strings.ToLower(strings.TrimSpace(day))
+	if d, ok := dayMap[normalizedDay]; ok {
+		return d, nil
+	}
+	return "", fmt.Errorf("invalid day: %s", day)
 }
 
-// TimetableWithPeriods combines a timetable with its periods
+// parseDays converts a slice of day name strings to domain.DayOfWeek values
+func parseDays(days []string) ([]domain.DayOfWeek, error) {
+	result := make([]domain.DayOfWeek, 0, len(days))
+	for _, day := range days {
+		d, err := parseDayOfWeek(day)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, d)
+	}
+	return result, nil
+}
+
+// TimetableConfigRequest holds user-provided configuration for timetable generation
+type TimetableConfigRequest struct {
+	PeriodsPerDay         int      `json:"periods_per_day,omitempty"`
+	PeriodDurationMinutes int      `json:"period_duration_minutes,omitempty"`
+	BreakDurationMinutes  int      `json:"break_duration_minutes,omitempty"`
+	StartTime             string   `json:"start_time,omitempty"` // Format: "2006-01-02T15:04" or "15:04"
+	Days                  []string `json:"days,omitempty"`       // e.g., ["Monday", "Tuesday", "Wednesday"]
+}
+
+// GenerateTimetableRequest represents a request to generate a timetable
+type GenerateTimetableRequest struct {
+	ClassID   uuid.UUID               `json:"class_id" validate:"required,uuid"`
+	SessionID uuid.UUID               `json:"session_id,omitempty"`
+	TermID    uuid.UUID               `json:"term_id" validate:"required,uuid"`
+	Config    *TimetableConfigRequest `json:"config,omitempty"`
+	Notes     *string                 `json:"notes,omitempty" validate:"omitempty,max=1000"`
+}
+
+// PeriodWithDetails represents a period with full course, tutor, and class objects
+type PeriodWithDetails struct {
+	ID           uuid.UUID       `json:"id"`
+	TenantID     uuid.UUID       `json:"tenant_id"`
+	TimetableID  uuid.UUID       `json:"timetable_id"`
+	Course       *domain.Course  `json:"course"`
+	Tutor        *TutorSummary   `json:"tutor"`
+	Class        *domain.Class   `json:"class"`
+	DayOfWeek    domain.DayOfWeek `json:"day_of_week"`
+	StartTime    time.Time       `json:"start_time"`
+	EndTime      time.Time       `json:"end_time"`
+	PeriodNumber int             `json:"period_number"`
+	Notes        *string         `json:"notes,omitempty"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
+}
+
+// TutorSummary represents a summary of tutor information for API responses
+type TutorSummary struct {
+	ID           uuid.UUID  `json:"id"`
+	FirstName    string     `json:"first_name"`
+	LastName     string     `json:"last_name"`
+	Email        string     `json:"email"`
+	ProfilePhoto *string    `json:"profile_photo,omitempty"`
+}
+
+// TimetableWithPeriods combines a timetable with its periods, class, and term
 type TimetableWithPeriods struct {
-	Timetable *domain.Timetable `json:"timetable"`
-	Periods   []*domain.Period  `json:"periods"`
+	ID                uuid.UUID              `json:"id"`
+	TenantID          uuid.UUID              `json:"tenant_id"`
+	Class             *domain.Class          `json:"class"`
+	Term              *domain.Term           `json:"term"`
+	Status            domain.TimetableStatus `json:"status"`
+	GeneratedAt       time.Time              `json:"generated_at"`
+	GeneratedBy       uuid.UUID              `json:"generated_by"`
+	PublishedAt       *time.Time             `json:"published_at,omitempty"`
+	PublishedBy       *uuid.UUID             `json:"published_by,omitempty"`
+	GenerationVersion int                    `json:"generation_version"`
+	Notes             *string                `json:"notes,omitempty"`
+	CreatedAt         time.Time              `json:"created_at"`
+	UpdatedAt         time.Time              `json:"updated_at"`
+	ArchivedAt        *time.Time             `json:"archived_at,omitempty"`
+	Periods           []*PeriodWithDetails   `json:"periods"`
 }
 
 // TimetableListItem represents a timetable with its associated class and term
@@ -165,7 +251,7 @@ func (s *TimetableService) GenerateTimetable(
 		return nil, fmt.Errorf("no active courses found for this class and term")
 	}
 
-	// Build configuration from tenant settings
+	// Build configuration from tenant settings and request config
 	config := DefaultTimetableConfig()
 	if tenant.Configuration.PeriodDuration > 0 {
 		config.PeriodDuration = tenant.Configuration.PeriodDuration
@@ -175,6 +261,36 @@ func (s *TimetableService) GenerateTimetable(
 	}
 	if len(tenant.Configuration.MaxPeriodsPerWeek) > 0 {
 		config.MaxPeriodsPerWeek = tenant.Configuration.MaxPeriodsPerWeek
+	}
+
+	// Override with request config if provided
+	if req.Config != nil {
+		if req.Config.PeriodsPerDay > 0 {
+			config.DailyPeriodLimit = req.Config.PeriodsPerDay
+		}
+		if req.Config.PeriodDurationMinutes > 0 {
+			config.PeriodDuration = req.Config.PeriodDurationMinutes
+		}
+		if req.Config.BreakDurationMinutes > 0 {
+			config.BreakDuration = req.Config.BreakDurationMinutes
+		}
+		if req.Config.StartTime != "" {
+			// Try parsing as full datetime first, then as time only
+			parsedTime, err := time.Parse("2006-01-02T15:04", req.Config.StartTime)
+			if err != nil {
+				parsedTime, err = time.Parse("15:04", req.Config.StartTime)
+			}
+			if err == nil {
+				config.StartTime = parsedTime
+			}
+		}
+		if len(req.Config.Days) > 0 {
+			days, err := parseDays(req.Config.Days)
+			if err != nil {
+				return nil, fmt.Errorf("invalid days configuration: %w", err)
+			}
+			config.InstructionalDays = days
+		}
 	}
 
 	// Start transaction
@@ -255,9 +371,28 @@ func (s *TimetableService) GenerateTimetable(
 		ipAddress,
 	)
 
+	// Enrich periods with full course, tutor, and class objects
+	enrichedPeriods, err := s.enrichPeriods(ctx, periods)
+	if err != nil {
+		return nil, fmt.Errorf("failed to enrich periods: %w", err)
+	}
+
 	return &TimetableWithPeriods{
-		Timetable: timetable,
-		Periods:   periods,
+		ID:                timetable.ID,
+		TenantID:          timetable.TenantID,
+		Class:             class,
+		Term:              term,
+		Status:            timetable.Status,
+		GeneratedAt:       timetable.GeneratedAt,
+		GeneratedBy:       timetable.GeneratedBy,
+		PublishedAt:       timetable.PublishedAt,
+		PublishedBy:       timetable.PublishedBy,
+		GenerationVersion: timetable.GenerationVersion,
+		Notes:             timetable.Notes,
+		CreatedAt:         timetable.CreatedAt,
+		UpdatedAt:         timetable.UpdatedAt,
+		ArchivedAt:        timetable.ArchivedAt,
+		Periods:           enrichedPeriods,
 	}, nil
 }
 
@@ -370,6 +505,79 @@ func (s *TimetableService) calculatePeriodTime(startOfDay time.Time, periodNumbe
 	return startOfDay.Add(time.Duration(offset) * time.Minute)
 }
 
+// enrichPeriods converts domain periods to PeriodWithDetails with full course, tutor, and class objects
+func (s *TimetableService) enrichPeriods(ctx context.Context, periods []*domain.Period) ([]*PeriodWithDetails, error) {
+	if len(periods) == 0 {
+		return []*PeriodWithDetails{}, nil
+	}
+
+	// Build caches to avoid repeated queries
+	courseCache := make(map[uuid.UUID]*domain.Course)
+	tutorCache := make(map[uuid.UUID]*TutorSummary)
+	classCache := make(map[uuid.UUID]*domain.Class)
+
+	result := make([]*PeriodWithDetails, 0, len(periods))
+
+	for _, p := range periods {
+		// Get course (from cache or fetch)
+		course, ok := courseCache[p.CourseID]
+		if !ok {
+			var err error
+			course, err = s.courseRepo.Get(ctx, p.CourseID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get course %s: %w", p.CourseID, err)
+			}
+			courseCache[p.CourseID] = course
+		}
+
+		// Get tutor (from cache or fetch)
+		tutor, ok := tutorCache[p.TutorID]
+		if !ok {
+			user, err := s.userRepo.GetByID(ctx, p.TutorID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get tutor %s: %w", p.TutorID, err)
+			}
+			tutor = &TutorSummary{
+				ID:           user.ID,
+				FirstName:    user.FirstName,
+				LastName:     user.LastName,
+				Email:        user.Email,
+				ProfilePhoto: user.ProfilePhoto,
+			}
+			tutorCache[p.TutorID] = tutor
+		}
+
+		// Get class (from cache or fetch)
+		class, ok := classCache[p.ClassID]
+		if !ok {
+			var err error
+			class, err = s.classRepo.Get(ctx, p.ClassID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get class %s: %w", p.ClassID, err)
+			}
+			classCache[p.ClassID] = class
+		}
+
+		result = append(result, &PeriodWithDetails{
+			ID:           p.ID,
+			TenantID:     p.TenantID,
+			TimetableID:  p.TimetableID,
+			Course:       course,
+			Tutor:        tutor,
+			Class:        class,
+			DayOfWeek:    p.DayOfWeek,
+			StartTime:    p.StartTime,
+			EndTime:      p.EndTime,
+			PeriodNumber: p.PeriodNumber,
+			Notes:        p.Notes,
+			CreatedAt:    p.CreatedAt,
+			UpdatedAt:    p.UpdatedAt,
+		})
+	}
+
+	return result, nil
+}
+
 // GetTimetable retrieves a timetable with its periods
 func (s *TimetableService) GetTimetable(ctx context.Context, id uuid.UUID) (*TimetableWithPeriods, error) {
 	timetable, err := s.timetableRepo.Get(ctx, id)
@@ -377,14 +585,45 @@ func (s *TimetableService) GetTimetable(ctx context.Context, id uuid.UUID) (*Tim
 		return nil, fmt.Errorf("failed to get timetable: %w", err)
 	}
 
+	// Get class
+	class, err := s.classRepo.Get(ctx, timetable.ClassID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get class: %w", err)
+	}
+
+	// Get term
+	term, err := s.termRepo.Get(ctx, timetable.TermID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get term: %w", err)
+	}
+
 	periods, err := s.periodRepo.ListByTimetable(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get periods: %w", err)
 	}
 
+	// Enrich periods with full course, tutor, and class objects
+	enrichedPeriods, err := s.enrichPeriods(ctx, periods)
+	if err != nil {
+		return nil, fmt.Errorf("failed to enrich periods: %w", err)
+	}
+
 	return &TimetableWithPeriods{
-		Timetable: timetable,
-		Periods:   periods,
+		ID:                timetable.ID,
+		TenantID:          timetable.TenantID,
+		Class:             class,
+		Term:              term,
+		Status:            timetable.Status,
+		GeneratedAt:       timetable.GeneratedAt,
+		GeneratedBy:       timetable.GeneratedBy,
+		PublishedAt:       timetable.PublishedAt,
+		PublishedBy:       timetable.PublishedBy,
+		GenerationVersion: timetable.GenerationVersion,
+		Notes:             timetable.Notes,
+		CreatedAt:         timetable.CreatedAt,
+		UpdatedAt:         timetable.UpdatedAt,
+		ArchivedAt:        timetable.ArchivedAt,
+		Periods:           enrichedPeriods,
 	}, nil
 }
 
@@ -395,14 +634,45 @@ func (s *TimetableService) GetTimetableByClassAndTerm(ctx context.Context, class
 		return nil, fmt.Errorf("failed to get timetable: %w", err)
 	}
 
+	// Get class
+	class, err := s.classRepo.Get(ctx, classID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get class: %w", err)
+	}
+
+	// Get term
+	term, err := s.termRepo.Get(ctx, termID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get term: %w", err)
+	}
+
 	periods, err := s.periodRepo.ListByTimetable(ctx, timetable.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get periods: %w", err)
 	}
 
+	// Enrich periods with full course, tutor, and class objects
+	enrichedPeriods, err := s.enrichPeriods(ctx, periods)
+	if err != nil {
+		return nil, fmt.Errorf("failed to enrich periods: %w", err)
+	}
+
 	return &TimetableWithPeriods{
-		Timetable: timetable,
-		Periods:   periods,
+		ID:                timetable.ID,
+		TenantID:          timetable.TenantID,
+		Class:             class,
+		Term:              term,
+		Status:            timetable.Status,
+		GeneratedAt:       timetable.GeneratedAt,
+		GeneratedBy:       timetable.GeneratedBy,
+		PublishedAt:       timetable.PublishedAt,
+		PublishedBy:       timetable.PublishedBy,
+		GenerationVersion: timetable.GenerationVersion,
+		Notes:             timetable.Notes,
+		CreatedAt:         timetable.CreatedAt,
+		UpdatedAt:         timetable.UpdatedAt,
+		ArchivedAt:        timetable.ArchivedAt,
+		Periods:           enrichedPeriods,
 	}, nil
 }
 

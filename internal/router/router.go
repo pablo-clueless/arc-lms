@@ -127,6 +127,7 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 		classRepo,
 		termRepo,
 		tenantRepo,
+		userRepo,
 		auditService,
 	)
 	examinationService := service.NewExaminationService(examinationRepo, courseRepo, auditService)
