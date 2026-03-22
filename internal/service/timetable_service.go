@@ -130,7 +130,7 @@ func (s *TimetableService) GenerateTimetable(
 	}
 
 	// Get all active courses for this class and term
-	courses, err := s.courseRepo.ListByClass(ctx, req.ClassID, repository.PaginationParams{Limit: 100})
+	courses, _, err := s.courseRepo.ListByClass(ctx, req.ClassID, repository.PaginationParams{Limit: 100})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list courses: %w", err)
 	}
@@ -397,25 +397,22 @@ func (s *TimetableService) ListTimetables(
 	params repository.PaginationParams,
 ) ([]*domain.Timetable, *repository.PaginatedResult, error) {
 	var timetables []*domain.Timetable
+	var total int
 	var err error
 
 	if classID != nil {
-		timetables, err = s.timetableRepo.ListByClass(ctx, *classID, params)
+		timetables, total, err = s.timetableRepo.ListByClass(ctx, *classID, params)
 	} else if termID != nil {
-		timetables, err = s.timetableRepo.ListByTerm(ctx, *termID, params)
+		timetables, total, err = s.timetableRepo.ListByTerm(ctx, *termID, params)
 	} else {
-		timetables, err = s.timetableRepo.ListByTenant(ctx, tenantID, params)
+		timetables, total, err = s.timetableRepo.ListByTenant(ctx, tenantID, params)
 	}
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list timetables: %w", err)
 	}
 
-	ids := make([]uuid.UUID, len(timetables))
-	for i, t := range timetables {
-		ids[i] = t.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return timetables, &pagination, nil
 }
@@ -817,23 +814,20 @@ func (s *TimetableService) ListSwapRequests(
 	params repository.PaginationParams,
 ) ([]*domain.SwapRequest, *repository.PaginatedResult, error) {
 	var requests []*domain.SwapRequest
+	var total int
 	var err error
 
 	if tutorID != nil {
-		requests, err = s.swapRequestRepo.ListByTutor(ctx, *tutorID, status, params)
+		requests, total, err = s.swapRequestRepo.ListByTutor(ctx, *tutorID, status, params)
 	} else {
-		requests, err = s.swapRequestRepo.ListByTenant(ctx, tenantID, status, params)
+		requests, total, err = s.swapRequestRepo.ListByTenant(ctx, tenantID, status, params)
 	}
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list swap requests: %w", err)
 	}
 
-	ids := make([]uuid.UUID, len(requests))
-	for i, r := range requests {
-		ids[i] = r.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return requests, &pagination, nil
 }
@@ -844,16 +838,12 @@ func (s *TimetableService) ListPendingSwapRequestsForTutor(
 	tutorID uuid.UUID,
 	params repository.PaginationParams,
 ) ([]*domain.SwapRequest, *repository.PaginatedResult, error) {
-	requests, err := s.swapRequestRepo.ListPendingForTutor(ctx, tutorID, params)
+	requests, total, err := s.swapRequestRepo.ListPendingForTutor(ctx, tutorID, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list pending swap requests: %w", err)
 	}
 
-	ids := make([]uuid.UUID, len(requests))
-	for i, r := range requests {
-		ids[i] = r.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return requests, &pagination, nil
 }
@@ -864,16 +854,12 @@ func (s *TimetableService) ListEscalatedSwapRequests(
 	tenantID uuid.UUID,
 	params repository.PaginationParams,
 ) ([]*domain.SwapRequest, *repository.PaginatedResult, error) {
-	requests, err := s.swapRequestRepo.ListEscalated(ctx, tenantID, params)
+	requests, total, err := s.swapRequestRepo.ListEscalated(ctx, tenantID, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list escalated swap requests: %w", err)
 	}
 
-	ids := make([]uuid.UUID, len(requests))
-	for i, r := range requests {
-		ids[i] = r.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return requests, &pagination, nil
 }

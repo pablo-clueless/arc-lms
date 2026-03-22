@@ -167,26 +167,31 @@ func GetExecer(db *sql.DB, tx *sql.Tx) Execer {
 	return db
 }
 
-// PaginationParams defines parameters for cursor-based pagination
+// PaginationParams defines parameters for page-based pagination
 type PaginationParams struct {
-	Cursor    *uuid.UUID // Last seen ID for cursor-based pagination
-	Limit     int        // Number of records to fetch
-	SortOrder string     // "ASC" or "DESC"
+	Page      int    // Current page number (1-indexed)
+	Limit     int    // Number of records per page
+	SortOrder string // "ASC" or "DESC"
+	SortBy    string // Field to sort by (optional)
 }
 
 // DefaultPaginationParams returns sensible defaults for pagination
 func DefaultPaginationParams() PaginationParams {
 	return PaginationParams{
-		Cursor:    nil,
-		Limit:     50,
+		Page:      1,
+		Limit:     20,
 		SortOrder: "DESC",
+		SortBy:    "created_at",
 	}
 }
 
 // ValidatePaginationParams validates and normalizes pagination parameters
 func ValidatePaginationParams(params *PaginationParams) error {
+	if params.Page <= 0 {
+		params.Page = 1
+	}
 	if params.Limit <= 0 {
-		params.Limit = 50
+		params.Limit = 20
 	}
 	if params.Limit > 100 {
 		params.Limit = 100
@@ -197,27 +202,36 @@ func ValidatePaginationParams(params *PaginationParams) error {
 	return nil
 }
 
-// PaginatedResult holds paginated query results
-type PaginatedResult struct {
-	HasMore    bool       `json:"has_more"`
-	NextCursor *uuid.UUID `json:"next_cursor,omitempty"`
-	Count      int        `json:"count"`
+// Offset calculates the offset for SQL queries
+func (p PaginationParams) Offset() int {
+	return (p.Page - 1) * p.Limit
 }
 
-// BuildPaginatedResult builds pagination metadata from results
-func BuildPaginatedResult(ids []uuid.UUID, limit int) PaginatedResult {
-	result := PaginatedResult{
-		HasMore: len(ids) > limit,
-		Count:   len(ids),
+// PaginatedResult holds paginated query results
+type PaginatedResult struct {
+	Page        int  `json:"page"`
+	Limit       int  `json:"limit"`
+	Total       int  `json:"total"`
+	TotalPages  int  `json:"total_pages"`
+	HasNext     bool `json:"has_next"`
+	HasPrevious bool `json:"has_previous"`
+}
+
+// BuildPaginatedResult builds pagination metadata from total count and params
+func BuildPaginatedResult(total int, params PaginationParams) PaginatedResult {
+	totalPages := total / params.Limit
+	if total%params.Limit > 0 {
+		totalPages++
 	}
 
-	if result.HasMore {
-		// Set next cursor to the last ID (before the extra record)
-		result.NextCursor = &ids[limit-1]
-		result.Count = limit
+	return PaginatedResult{
+		Page:        params.Page,
+		Limit:       params.Limit,
+		Total:       total,
+		TotalPages:  totalPages,
+		HasNext:     params.Page < totalPages,
+		HasPrevious: params.Page > 1,
 	}
-
-	return result
 }
 
 // TenantScoped defines repositories that support tenant isolation

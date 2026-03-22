@@ -268,94 +268,70 @@ func (r *MeetingRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // ListByTenant retrieves meetings for a tenant
-func (r *MeetingRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, status *domain.MeetingStatus, params repository.PaginationParams) ([]*domain.Meeting, error) {
+func (r *MeetingRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, status *domain.MeetingStatus, params repository.PaginationParams) ([]*domain.Meeting, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
-		SELECT
-			id, tenant_id, class_id, course_id, host_tutor_id,
-			title, description, scheduled_start, estimated_duration,
-			status, provider, meeting_url, provider_meeting_id,
-			access_code, actual_start_time, actual_end_time,
-			recording_url, recording_expires_at, participant_events,
-			cancellation_reason, cancelled_by, cancelled_at,
-			created_at, updated_at
-		FROM meetings
-		WHERE tenant_id = $1
-	`
-
+	whereClause := "WHERE tenant_id = $1"
 	args := []interface{}{tenantID}
 	argIndex := 2
 
 	if status != nil {
-		query += fmt.Sprintf(" AND status = $%d", argIndex)
+		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
 		args = append(args, *status)
 		argIndex++
 	}
 
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM meetings %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
 	}
 
-	query += fmt.Sprintf(" ORDER BY scheduled_start %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
+	// Get paginated results
+	query := fmt.Sprintf(`
+		SELECT
+			id, tenant_id, class_id, course_id, host_tutor_id,
+			title, description, scheduled_start, estimated_duration,
+			status, provider, meeting_url, provider_meeting_id,
+			access_code, actual_start_time, actual_end_time,
+			recording_url, recording_expires_at, participant_events,
+			cancellation_reason, cancelled_by, cancelled_at,
+			created_at, updated_at
+		FROM meetings
+		%s ORDER BY scheduled_start %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
-	return r.queryMeetings(ctx, query, args...)
+	meetings, err := r.queryMeetings(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return meetings, total, nil
 }
 
 // ListByClass retrieves meetings for a class
-func (r *MeetingRepository) ListByClass(ctx context.Context, classID uuid.UUID, params repository.PaginationParams) ([]*domain.Meeting, error) {
+func (r *MeetingRepository) ListByClass(ctx context.Context, classID uuid.UUID, params repository.PaginationParams) ([]*domain.Meeting, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
-		SELECT
-			id, tenant_id, class_id, course_id, host_tutor_id,
-			title, description, scheduled_start, estimated_duration,
-			status, provider, meeting_url, provider_meeting_id,
-			access_code, actual_start_time, actual_end_time,
-			recording_url, recording_expires_at, participant_events,
-			cancellation_reason, cancelled_by, cancelled_at,
-			created_at, updated_at
-		FROM meetings
-		WHERE class_id = $1
-	`
-
+	whereClause := "WHERE class_id = $1"
 	args := []interface{}{classID}
 	argIndex := 2
 
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM meetings %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
 	}
 
-	query += fmt.Sprintf(" ORDER BY scheduled_start %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryMeetings(ctx, query, args...)
-}
-
-// ListByTutor retrieves meetings hosted by a tutor
-func (r *MeetingRepository) ListByTutor(ctx context.Context, tutorID uuid.UUID, params repository.PaginationParams) ([]*domain.Meeting, error) {
-	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
-	}
-
-	query := `
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, class_id, course_id, host_tutor_id,
 			title, description, scheduled_start, estimated_duration,
@@ -365,26 +341,56 @@ func (r *MeetingRepository) ListByTutor(ctx context.Context, tutorID uuid.UUID, 
 			cancellation_reason, cancelled_by, cancelled_at,
 			created_at, updated_at
 		FROM meetings
-		WHERE host_tutor_id = $1
-	`
+		%s ORDER BY scheduled_start %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
+	meetings, err := r.queryMeetings(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return meetings, total, nil
+}
+
+// ListByTutor retrieves meetings hosted by a tutor
+func (r *MeetingRepository) ListByTutor(ctx context.Context, tutorID uuid.UUID, params repository.PaginationParams) ([]*domain.Meeting, int, error) {
+	if err := repository.ValidatePaginationParams(&params); err != nil {
+		return nil, 0, err
+	}
+
+	whereClause := "WHERE host_tutor_id = $1"
 	args := []interface{}{tutorID}
 	argIndex := 2
 
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM meetings %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
 	}
 
-	query += fmt.Sprintf(" ORDER BY scheduled_start %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
+	// Get paginated results
+	query := fmt.Sprintf(`
+		SELECT
+			id, tenant_id, class_id, course_id, host_tutor_id,
+			title, description, scheduled_start, estimated_duration,
+			status, provider, meeting_url, provider_meeting_id,
+			access_code, actual_start_time, actual_end_time,
+			recording_url, recording_expires_at, participant_events,
+			cancellation_reason, cancelled_by, cancelled_at,
+			created_at, updated_at
+		FROM meetings
+		%s ORDER BY scheduled_start %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
-	return r.queryMeetings(ctx, query, args...)
+	meetings, err := r.queryMeetings(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return meetings, total, nil
 }
 
 // ListUpcoming retrieves upcoming meetings for a tenant
@@ -428,50 +434,54 @@ func (r *MeetingRepository) ListLive(ctx context.Context, tenantID uuid.UUID) ([
 
 // ListByDateRange retrieves meetings within a date range
 // If tenantID is uuid.Nil, it returns meetings across all tenants
-func (r *MeetingRepository) ListByDateRange(ctx context.Context, tenantID uuid.UUID, startDate, endDate time.Time, params repository.PaginationParams) ([]*domain.Meeting, error) {
+func (r *MeetingRepository) ListByDateRange(ctx context.Context, tenantID uuid.UUID, startDate, endDate time.Time, params repository.PaginationParams) ([]*domain.Meeting, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	var query string
+	var whereClause string
 	var args []interface{}
+	var argIndex int
 
 	if tenantID == uuid.Nil {
 		// Cross-tenant query (for background jobs)
-		query = `
-			SELECT
-				id, tenant_id, class_id, course_id, host_tutor_id,
-				title, description, scheduled_start, estimated_duration,
-				status, provider, meeting_url, provider_meeting_id,
-				access_code, actual_start_time, actual_end_time,
-				recording_url, recording_expires_at, participant_events,
-				cancellation_reason, cancelled_by, cancelled_at,
-				created_at, updated_at
-			FROM meetings
-			WHERE scheduled_start >= $1 AND scheduled_start < $2
-			ORDER BY scheduled_start ASC
-			LIMIT $3
-		`
-		args = []interface{}{startDate, endDate, params.Limit}
+		whereClause = "WHERE scheduled_start >= $1 AND scheduled_start < $2"
+		args = []interface{}{startDate, endDate}
+		argIndex = 3
 	} else {
-		query = `
-			SELECT
-				id, tenant_id, class_id, course_id, host_tutor_id,
-				title, description, scheduled_start, estimated_duration,
-				status, provider, meeting_url, provider_meeting_id,
-				access_code, actual_start_time, actual_end_time,
-				recording_url, recording_expires_at, participant_events,
-				cancellation_reason, cancelled_by, cancelled_at,
-				created_at, updated_at
-			FROM meetings
-			WHERE tenant_id = $1 AND scheduled_start >= $2 AND scheduled_start < $3
-			ORDER BY scheduled_start ASC
-			LIMIT $4
-		`
-		args = []interface{}{tenantID, startDate, endDate, params.Limit}
+		whereClause = "WHERE tenant_id = $1 AND scheduled_start >= $2 AND scheduled_start < $3"
+		args = []interface{}{tenantID, startDate, endDate}
+		argIndex = 4
 	}
 
-	return r.queryMeetings(ctx, query, args...)
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM meetings %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
+		SELECT
+			id, tenant_id, class_id, course_id, host_tutor_id,
+			title, description, scheduled_start, estimated_duration,
+			status, provider, meeting_url, provider_meeting_id,
+			access_code, actual_start_time, actual_end_time,
+			recording_url, recording_expires_at, participant_events,
+			cancellation_reason, cancelled_by, cancelled_at,
+			created_at, updated_at
+		FROM meetings
+		%s ORDER BY scheduled_start %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
+
+	meetings, err := r.queryMeetings(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return meetings, total, nil
 }
 
 // queryMeetings executes a query and returns a list of meetings

@@ -69,7 +69,7 @@ func (j *OverdueInvoiceJob) Run(ctx context.Context) error {
 
 	// Step 2: Get all overdue invoices for further processing
 	params := repository.PaginationParams{Limit: 100}
-	overdueInvoices, err := j.invoiceRepo.GetOverdueInvoices(ctx, params)
+	overdueInvoices, _, err := j.invoiceRepo.GetOverdueInvoices(ctx, params)
 	if err != nil {
 		return fmt.Errorf("failed to get overdue invoices: %w", err)
 	}

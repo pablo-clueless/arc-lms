@@ -237,12 +237,20 @@ func (r *CourseRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // ListByClass retrieves courses for a class with pagination
-func (r *CourseRepository) ListByClass(ctx context.Context, classID uuid.UUID, params repository.PaginationParams) ([]*domain.Course, error) {
+func (r *CourseRepository) ListByClass(ctx context.Context, classID uuid.UUID, params repository.PaginationParams) ([]*domain.Course, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM courses WHERE class_id = $1"
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, classID).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, session_id, class_id, term_id,
 			name, subject_code, description, assigned_tutor_id,
@@ -250,34 +258,33 @@ func (r *CourseRepository) ListByClass(ctx context.Context, classID uuid.UUID, p
 			materials, syllabus, created_at, updated_at
 		FROM courses
 		WHERE class_id = $1
-	`
+		ORDER BY id %s
+		LIMIT $2 OFFSET $3
+	`, params.SortOrder)
 
-	args := []interface{}{classID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	courses, err := r.queryCourses(ctx, query, classID, params.Limit, params.Offset())
+	if err != nil {
+		return nil, 0, err
 	}
 
-	query += fmt.Sprintf(" ORDER BY id %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryCourses(ctx, query, args...)
+	return courses, total, nil
 }
 
 // ListByTerm retrieves courses for a term with pagination
-func (r *CourseRepository) ListByTerm(ctx context.Context, termID uuid.UUID, params repository.PaginationParams) ([]*domain.Course, error) {
+func (r *CourseRepository) ListByTerm(ctx context.Context, termID uuid.UUID, params repository.PaginationParams) ([]*domain.Course, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM courses WHERE term_id = $1"
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, termID).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, session_id, class_id, term_id,
 			name, subject_code, description, assigned_tutor_id,
@@ -285,34 +292,33 @@ func (r *CourseRepository) ListByTerm(ctx context.Context, termID uuid.UUID, par
 			materials, syllabus, created_at, updated_at
 		FROM courses
 		WHERE term_id = $1
-	`
+		ORDER BY id %s
+		LIMIT $2 OFFSET $3
+	`, params.SortOrder)
 
-	args := []interface{}{termID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	courses, err := r.queryCourses(ctx, query, termID, params.Limit, params.Offset())
+	if err != nil {
+		return nil, 0, err
 	}
 
-	query += fmt.Sprintf(" ORDER BY id %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryCourses(ctx, query, args...)
+	return courses, total, nil
 }
 
 // ListByTutor retrieves courses assigned to a tutor with pagination
-func (r *CourseRepository) ListByTutor(ctx context.Context, tutorID uuid.UUID, params repository.PaginationParams) ([]*domain.Course, error) {
+func (r *CourseRepository) ListByTutor(ctx context.Context, tutorID uuid.UUID, params repository.PaginationParams) ([]*domain.Course, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM courses WHERE assigned_tutor_id = $1"
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, tutorID).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, session_id, class_id, term_id,
 			name, subject_code, description, assigned_tutor_id,
@@ -320,25 +326,16 @@ func (r *CourseRepository) ListByTutor(ctx context.Context, tutorID uuid.UUID, p
 			materials, syllabus, created_at, updated_at
 		FROM courses
 		WHERE assigned_tutor_id = $1
-	`
+		ORDER BY id %s
+		LIMIT $2 OFFSET $3
+	`, params.SortOrder)
 
-	args := []interface{}{tutorID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	courses, err := r.queryCourses(ctx, query, tutorID, params.Limit, params.Offset())
+	if err != nil {
+		return nil, 0, err
 	}
 
-	query += fmt.Sprintf(" ORDER BY id %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryCourses(ctx, query, args...)
+	return courses, total, nil
 }
 
 // queryCourses executes a query and returns a list of courses

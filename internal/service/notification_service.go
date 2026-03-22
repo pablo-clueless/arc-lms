@@ -166,11 +166,12 @@ func (s *NotificationService) ListUserNotifications(
 	unreadOnly bool,
 	params repository.PaginationParams,
 ) ([]*domain.Notification, *repository.PaginatedResult, error) {
-	notifications, pagination, err := s.notificationRepo.ListByUser(ctx, userID, unreadOnly, params)
+	notifications, total, err := s.notificationRepo.ListByUser(ctx, userID, unreadOnly, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list notifications: %w", err)
 	}
-	return notifications, pagination, nil
+	pagination := repository.BuildPaginatedResult(total, params)
+	return notifications, &pagination, nil
 }
 
 // MarkAsRead marks a notification as read

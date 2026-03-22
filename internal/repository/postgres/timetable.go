@@ -162,71 +162,75 @@ func (r *TimetableRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // ListByClass retrieves timetables for a class with pagination
-func (r *TimetableRepository) ListByClass(ctx context.Context, classID uuid.UUID, params repository.PaginationParams) ([]*domain.Timetable, error) {
+func (r *TimetableRepository) ListByClass(ctx context.Context, classID uuid.UUID, params repository.PaginationParams) ([]*domain.Timetable, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
-		SELECT
-			id, tenant_id, class_id, term_id, status,
-			generated_at, generated_by, published_at, published_by,
-			generation_version, notes, created_at, updated_at, archived_at
-		FROM timetables
-		WHERE class_id = $1
-	`
-
+	whereClause := "WHERE class_id = $1"
 	args := []interface{}{classID}
 	argIndex := 2
 
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM timetables %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
 	}
 
-	query += fmt.Sprintf(" ORDER BY id %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryTimetables(ctx, query, args...)
-}
-
-// ListByTerm retrieves timetables for a term with pagination
-func (r *TimetableRepository) ListByTerm(ctx context.Context, termID uuid.UUID, params repository.PaginationParams) ([]*domain.Timetable, error) {
-	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
-	}
-
-	query := `
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, class_id, term_id, status,
 			generated_at, generated_by, published_at, published_by,
 			generation_version, notes, created_at, updated_at, archived_at
 		FROM timetables
-		WHERE term_id = $1
-	`
+		%s ORDER BY id %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
+	timetables, err := r.queryTimetables(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return timetables, total, nil
+}
+
+// ListByTerm retrieves timetables for a term with pagination
+func (r *TimetableRepository) ListByTerm(ctx context.Context, termID uuid.UUID, params repository.PaginationParams) ([]*domain.Timetable, int, error) {
+	if err := repository.ValidatePaginationParams(&params); err != nil {
+		return nil, 0, err
+	}
+
+	whereClause := "WHERE term_id = $1"
 	args := []interface{}{termID}
 	argIndex := 2
 
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM timetables %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
 	}
 
-	query += fmt.Sprintf(" ORDER BY id %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
+	// Get paginated results
+	query := fmt.Sprintf(`
+		SELECT
+			id, tenant_id, class_id, term_id, status,
+			generated_at, generated_by, published_at, published_by,
+			generation_version, notes, created_at, updated_at, archived_at
+		FROM timetables
+		%s ORDER BY id %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
-	return r.queryTimetables(ctx, query, args...)
+	timetables, err := r.queryTimetables(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return timetables, total, nil
 }
 
 // queryTimetables executes a query and returns a list of timetables
@@ -487,35 +491,37 @@ func (r *TimetableRepository) Archive(ctx context.Context, id uuid.UUID, tx *sql
 }
 
 // ListByTenant retrieves timetables for a tenant with pagination
-func (r *TimetableRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, params repository.PaginationParams) ([]*domain.Timetable, error) {
+func (r *TimetableRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, params repository.PaginationParams) ([]*domain.Timetable, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	whereClause := "WHERE tenant_id = $1 AND status != $2"
+	args := []interface{}{tenantID, domain.TimetableStatusArchived}
+	argIndex := 3
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM timetables %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, class_id, term_id, status,
 			generated_at, generated_by, published_at, published_by,
 			generation_version, notes, created_at, updated_at, archived_at
 		FROM timetables
-		WHERE tenant_id = $1 AND status != $2
-	`
+		%s ORDER BY id %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
-	args := []interface{}{tenantID, domain.TimetableStatusArchived}
-	argIndex := 3
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	timetables, err := r.queryTimetables(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	query += fmt.Sprintf(" ORDER BY id %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryTimetables(ctx, query, args...)
+	return timetables, total, nil
 }

@@ -152,44 +152,41 @@ func (r *SessionRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // ListByTenant retrieves sessions for a tenant with pagination
-func (r *SessionRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, status *domain.SessionStatus, params repository.PaginationParams) ([]*domain.Session, error) {
+func (r *SessionRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, status *domain.SessionStatus, params repository.PaginationParams) ([]*domain.Session, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
-		SELECT
-			id, tenant_id, label, start_year, end_year,
-			status, description, created_at, updated_at, archived_at
-		FROM sessions
-		WHERE tenant_id = $1
-	`
-
+	whereClause := "WHERE tenant_id = $1"
 	args := []interface{}{tenantID}
 	argIndex := 2
 
 	if status != nil {
-		query += fmt.Sprintf(" AND status = $%d", argIndex)
+		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
 		args = append(args, *status)
 		argIndex++
 	}
 
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM sessions %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
 	}
 
-	query += fmt.Sprintf(" ORDER BY id %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
+	// Get paginated results
+	query := fmt.Sprintf(`
+		SELECT
+			id, tenant_id, label, start_year, end_year,
+			status, description, created_at, updated_at, archived_at
+		FROM sessions
+		%s ORDER BY id %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
 	rows, err := r.GetDB().QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 	defer rows.Close()
 
@@ -213,7 +210,7 @@ func (r *SessionRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID
 		)
 
 		if err != nil {
-			return nil, repository.ParseError(err)
+			return nil, 0, repository.ParseError(err)
 		}
 
 		session.Description = repository.FromNullString(description)
@@ -225,10 +222,10 @@ func (r *SessionRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 
-	return sessions, nil
+	return sessions, total, nil
 }
 
 // Activate activates a session (enforces BR-007: only one active session per tenant)

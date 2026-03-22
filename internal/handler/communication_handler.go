@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"arc-lms/internal/domain"
@@ -72,7 +73,7 @@ func (h *CommunicationHandler) ComposeEmail(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Param status query string false "Filter by status (DRAFT, SCHEDULED, SENDING, SENT, FAILED, CANCELLED)"
-// @Param cursor query string false "Pagination cursor"
+// @Param page query int false "Page number"
 // @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
 // @Router /communications/emails [get]
@@ -90,10 +91,16 @@ func (h *CommunicationHandler) ListEmails(c *gin.Context) {
 		status = &s
 	}
 
-	params := repository.PaginationParams{Limit: 50, SortOrder: "DESC"}
-	if cursorStr := c.Query("cursor"); cursorStr != "" {
-		cursor, _ := uuid.Parse(cursorStr)
-		params.Cursor = &cursor
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
 	}
 
 	// For tutors, only show their own emails
@@ -416,15 +423,25 @@ func (h *CommunicationHandler) SearchEmails(c *gin.Context) {
 		return
 	}
 
-	params := repository.PaginationParams{Limit: 50}
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
+	}
 
-	emails, err := h.communicationService.SearchEmails(c.Request.Context(), tenantID, searchTerm, params)
+	emails, pagination, err := h.communicationService.SearchEmails(c.Request.Context(), tenantID, searchTerm, params)
 	if err != nil {
 		errors.BadRequest(c, err.Error(), nil)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": emails})
+	c.JSON(http.StatusOK, gin.H{"data": emails, "pagination": pagination})
 }
 
 // RecipientPreviewRequest represents a request to preview recipients

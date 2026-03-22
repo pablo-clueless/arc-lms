@@ -257,12 +257,43 @@ func (r *UserRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // List retrieves users with filters and pagination
-func (r *UserRepository) List(ctx context.Context, tenantID *uuid.UUID, role *domain.Role, status *domain.UserStatus, params repository.PaginationParams) ([]*domain.User, error) {
+func (r *UserRepository) List(ctx context.Context, tenantID *uuid.UUID, role *domain.Role, status *domain.UserStatus, params repository.PaginationParams) ([]*domain.User, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Build WHERE clause
+	whereClause := "WHERE 1=1"
+	args := []interface{}{}
+	argIndex := 1
+
+	if tenantID != nil {
+		whereClause += fmt.Sprintf(" AND tenant_id = $%d", argIndex)
+		args = append(args, *tenantID)
+		argIndex++
+	}
+
+	if role != nil {
+		whereClause += fmt.Sprintf(" AND role = $%d", argIndex)
+		args = append(args, *role)
+		argIndex++
+	}
+
+	if status != nil {
+		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
+		args = append(args, *status)
+		argIndex++
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM users %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, role, email, password_hash,
 			first_name, last_name, middle_name, profile_photo, phone,
@@ -272,46 +303,16 @@ func (r *UserRepository) List(ctx context.Context, tenantID *uuid.UUID, role *do
 			deactivated_at, deactivation_reason,
 			created_at, updated_at
 		FROM users
-		WHERE 1=1
-	`
+		%s
+		ORDER BY created_at %s
+		LIMIT $%d OFFSET $%d
+	`, whereClause, params.SortOrder, argIndex, argIndex+1)
 
-	args := []interface{}{}
-	argIndex := 1
-
-	if tenantID != nil {
-		query += fmt.Sprintf(" AND tenant_id = $%d", argIndex)
-		args = append(args, *tenantID)
-		argIndex++
-	}
-
-	if role != nil {
-		query += fmt.Sprintf(" AND role = $%d", argIndex)
-		args = append(args, *role)
-		argIndex++
-	}
-
-	if status != nil {
-		query += fmt.Sprintf(" AND status = $%d", argIndex)
-		args = append(args, *status)
-		argIndex++
-	}
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
-	}
-
-	query += fmt.Sprintf(" ORDER BY id %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
+	args = append(args, params.Limit, params.Offset())
 
 	rows, err := r.GetDB().QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 	defer rows.Close()
 
@@ -319,16 +320,16 @@ func (r *UserRepository) List(ctx context.Context, tenantID *uuid.UUID, role *do
 	for rows.Next() {
 		user, err := r.scanUserFromRows(rows)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		users = append(users, user)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 
-	return users, nil
+	return users, total, nil
 }
 
 // scanUserFromRows scans a user from a Rows object

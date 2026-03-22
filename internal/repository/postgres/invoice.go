@@ -119,12 +119,22 @@ func (r *InvoiceRepository) GetBillingMetrics(ctx context.Context) (*BillingMetr
 }
 
 // GetUpcomingInvoices retrieves invoices due within the specified days
-func (r *InvoiceRepository) GetUpcomingInvoices(ctx context.Context, withinDays int, params repository.PaginationParams) ([]*domain.Invoice, error) {
+func (r *InvoiceRepository) GetUpcomingInvoices(ctx context.Context, withinDays int, params repository.PaginationParams) ([]*domain.Invoice, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	whereClause := "WHERE status = 'PENDING' AND due_date BETWEEN NOW() AND NOW() + $1 * INTERVAL '1 day'"
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM invoices %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, withinDays).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, subscription_id, term_id, invoice_number,
 			status, currency, line_items, subtotal_amount, tax_amount,
@@ -133,32 +143,36 @@ func (r *InvoiceRepository) GetUpcomingInvoices(ctx context.Context, withinDays 
 			notes, billing_email, pdf_url, created_at, updated_at,
 			disputed_at, dispute_reason, voided_at, void_reason
 		FROM invoices
-		WHERE status = 'PENDING'
-			AND due_date BETWEEN NOW() AND NOW() + $1 * INTERVAL '1 day'
-	`
+		%s
+		ORDER BY due_date %s
+		LIMIT $2 OFFSET $3
+	`, whereClause, params.SortOrder)
 
-	args := []interface{}{withinDays}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		query += fmt.Sprintf(" AND id > $%d", argIndex)
-		args = append(args, *params.Cursor)
-		argIndex++
+	invoices, err := r.queryInvoices(ctx, query, withinDays, params.Limit, params.Offset())
+	if err != nil {
+		return nil, 0, err
 	}
 
-	query += fmt.Sprintf(" ORDER BY due_date ASC LIMIT $%d", argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryInvoices(ctx, query, args...)
+	return invoices, total, nil
 }
 
 // GetOverdueInvoices retrieves overdue invoices
-func (r *InvoiceRepository) GetOverdueInvoices(ctx context.Context, params repository.PaginationParams) ([]*domain.Invoice, error) {
+func (r *InvoiceRepository) GetOverdueInvoices(ctx context.Context, params repository.PaginationParams) ([]*domain.Invoice, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	whereClause := "WHERE status = 'OVERDUE' OR (status = 'PENDING' AND due_date < NOW())"
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM invoices %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, subscription_id, term_id, invoice_number,
 			status, currency, line_items, subtotal_amount, tax_amount,
@@ -167,23 +181,17 @@ func (r *InvoiceRepository) GetOverdueInvoices(ctx context.Context, params repos
 			notes, billing_email, pdf_url, created_at, updated_at,
 			disputed_at, dispute_reason, voided_at, void_reason
 		FROM invoices
-		WHERE status = 'OVERDUE'
-			OR (status = 'PENDING' AND due_date < NOW())
-	`
+		%s
+		ORDER BY due_date %s
+		LIMIT $1 OFFSET $2
+	`, whereClause, params.SortOrder)
 
-	args := []interface{}{}
-	argIndex := 1
-
-	if params.Cursor != nil {
-		query += fmt.Sprintf(" AND id > $%d", argIndex)
-		args = append(args, *params.Cursor)
-		argIndex++
+	invoices, err := r.queryInvoices(ctx, query, params.Limit, params.Offset())
+	if err != nil {
+		return nil, 0, err
 	}
 
-	query += fmt.Sprintf(" ORDER BY due_date ASC LIMIT $%d", argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryInvoices(ctx, query, args...)
+	return invoices, total, nil
 }
 
 // Create creates a new invoice
@@ -322,12 +330,31 @@ func (r *InvoiceRepository) Update(ctx context.Context, invoice *domain.Invoice,
 }
 
 // ListByTenant retrieves invoices for a tenant
-func (r *InvoiceRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, status *domain.InvoiceStatus, params repository.PaginationParams) ([]*domain.Invoice, error) {
+func (r *InvoiceRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, status *domain.InvoiceStatus, params repository.PaginationParams) ([]*domain.Invoice, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Build WHERE clause
+	whereClause := "WHERE tenant_id = $1"
+	args := []interface{}{tenantID}
+	argIndex := 2
+
+	if status != nil {
+		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
+		args = append(args, *status)
+		argIndex++
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM invoices %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, subscription_id, term_id, invoice_number,
 			status, currency, line_items, subtotal_amount, tax_amount,
@@ -336,32 +363,19 @@ func (r *InvoiceRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID
 			notes, billing_email, pdf_url, created_at, updated_at,
 			disputed_at, dispute_reason, voided_at, void_reason
 		FROM invoices
-		WHERE tenant_id = $1
-	`
+		%s
+		ORDER BY created_at %s
+		LIMIT $%d OFFSET $%d
+	`, whereClause, params.SortOrder, argIndex, argIndex+1)
 
-	args := []interface{}{tenantID}
-	argIndex := 2
+	args = append(args, params.Limit, params.Offset())
 
-	if status != nil {
-		query += fmt.Sprintf(" AND status = $%d", argIndex)
-		args = append(args, *status)
-		argIndex++
+	invoices, err := r.queryInvoices(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
-	}
-
-	query += fmt.Sprintf(" ORDER BY created_at %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryInvoices(ctx, query, args...)
+	return invoices, total, nil
 }
 
 // scanInvoice scans an invoice from a database row
@@ -576,12 +590,31 @@ func (r *InvoiceRepository) GetByTerm(ctx context.Context, termID uuid.UUID) (*d
 }
 
 // ListAll retrieves all invoices across all tenants (for SuperAdmin)
-func (r *InvoiceRepository) ListAll(ctx context.Context, status *domain.InvoiceStatus, params repository.PaginationParams) ([]*domain.Invoice, error) {
+func (r *InvoiceRepository) ListAll(ctx context.Context, status *domain.InvoiceStatus, params repository.PaginationParams) ([]*domain.Invoice, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Build WHERE clause
+	whereClause := "WHERE 1=1"
+	args := []interface{}{}
+	argIndex := 1
+
+	if status != nil {
+		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
+		args = append(args, *status)
+		argIndex++
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM invoices %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, subscription_id, term_id, invoice_number,
 			status, currency, line_items, subtotal_amount, tax_amount,
@@ -590,28 +623,19 @@ func (r *InvoiceRepository) ListAll(ctx context.Context, status *domain.InvoiceS
 			notes, billing_email, pdf_url, created_at, updated_at,
 			disputed_at, dispute_reason, voided_at, void_reason
 		FROM invoices
-		WHERE 1=1
-	`
+		%s
+		ORDER BY created_at %s
+		LIMIT $%d OFFSET $%d
+	`, whereClause, params.SortOrder, argIndex, argIndex+1)
 
-	args := []interface{}{}
-	argIndex := 1
+	args = append(args, params.Limit, params.Offset())
 
-	if status != nil {
-		query += fmt.Sprintf(" AND status = $%d", argIndex)
-		args = append(args, *status)
-		argIndex++
+	invoices, err := r.queryInvoices(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	if params.Cursor != nil {
-		query += fmt.Sprintf(" AND id < $%d", argIndex)
-		args = append(args, *params.Cursor)
-		argIndex++
-	}
-
-	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryInvoices(ctx, query, args...)
+	return invoices, total, nil
 }
 
 // CreateBillingAdjustment creates a billing adjustment record
@@ -643,25 +667,32 @@ func (r *InvoiceRepository) CreateBillingAdjustment(ctx context.Context, adjustm
 }
 
 // ListBillingAdjustments retrieves billing adjustments for a tenant
-func (r *InvoiceRepository) ListBillingAdjustments(ctx context.Context, tenantID uuid.UUID, params repository.PaginationParams) ([]*domain.BillingAdjustment, error) {
-	query := `
+func (r *InvoiceRepository) ListBillingAdjustments(ctx context.Context, tenantID uuid.UUID, params repository.PaginationParams) ([]*domain.BillingAdjustment, int, error) {
+	if err := repository.ValidatePaginationParams(&params); err != nil {
+		return nil, 0, err
+	}
+
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM billing_adjustments WHERE tenant_id = $1"
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, tenantID).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count billing adjustments: %w", err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, invoice_id, type, amount, currency,
 			reason, applied_by, created_at
 		FROM billing_adjustments
 		WHERE tenant_id = $1
-		ORDER BY created_at DESC
-	`
+		ORDER BY created_at %s
+		LIMIT $2 OFFSET $3
+	`, params.SortOrder)
 
-	args := []interface{}{tenantID}
-
-	if params.Limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d", params.Limit)
-	}
-
-	rows, err := r.GetDB().QueryContext(ctx, query, args...)
+	rows, err := r.GetDB().QueryContext(ctx, query, tenantID, params.Limit, params.Offset())
 	if err != nil {
-		return nil, fmt.Errorf("failed to list billing adjustments: %w", err)
+		return nil, 0, fmt.Errorf("failed to list billing adjustments: %w", err)
 	}
 	defer rows.Close()
 
@@ -682,7 +713,7 @@ func (r *InvoiceRepository) ListBillingAdjustments(ctx context.Context, tenantID
 			&adj.CreatedAt,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan billing adjustment: %w", err)
+			return nil, 0, fmt.Errorf("failed to scan billing adjustment: %w", err)
 		}
 
 		if invoiceID.Valid {
@@ -693,7 +724,7 @@ func (r *InvoiceRepository) ListBillingAdjustments(ctx context.Context, tenantID
 		adjustments = append(adjustments, &adj)
 	}
 
-	return adjustments, nil
+	return adjustments, total, nil
 }
 
 // ApplyAdjustmentToInvoice applies an adjustment to an invoice's total

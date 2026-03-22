@@ -157,7 +157,7 @@ func (s *MeetingService) notifyStudentsAboutMeeting(ctx context.Context, meeting
 	}
 
 	// Get all enrolled students in the class
-	enrollments, err := s.enrollmentRepo.ListByClass(ctx, meeting.ClassID, repository.PaginationParams{Limit: 1000})
+	enrollments, _, err := s.enrollmentRepo.ListByClass(ctx, meeting.ClassID, repository.PaginationParams{Limit: 1000})
 	if err != nil {
 		return
 	}
@@ -515,16 +515,12 @@ func (s *MeetingService) ListMeetings(
 	status *domain.MeetingStatus,
 	params repository.PaginationParams,
 ) ([]*domain.Meeting, *repository.PaginatedResult, error) {
-	meetings, err := s.meetingRepo.ListByTenant(ctx, tenantID, status, params)
+	meetings, total, err := s.meetingRepo.ListByTenant(ctx, tenantID, status, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list meetings: %w", err)
 	}
 
-	ids := make([]uuid.UUID, len(meetings))
-	for i, m := range meetings {
-		ids[i] = m.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return meetings, &pagination, nil
 }
@@ -535,16 +531,12 @@ func (s *MeetingService) ListMeetingsByClass(
 	classID uuid.UUID,
 	params repository.PaginationParams,
 ) ([]*domain.Meeting, *repository.PaginatedResult, error) {
-	meetings, err := s.meetingRepo.ListByClass(ctx, classID, params)
+	meetings, total, err := s.meetingRepo.ListByClass(ctx, classID, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list meetings: %w", err)
 	}
 
-	ids := make([]uuid.UUID, len(meetings))
-	for i, m := range meetings {
-		ids[i] = m.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return meetings, &pagination, nil
 }
@@ -555,16 +547,12 @@ func (s *MeetingService) ListMeetingsByTutor(
 	tutorID uuid.UUID,
 	params repository.PaginationParams,
 ) ([]*domain.Meeting, *repository.PaginatedResult, error) {
-	meetings, err := s.meetingRepo.ListByTutor(ctx, tutorID, params)
+	meetings, total, err := s.meetingRepo.ListByTutor(ctx, tutorID, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list meetings: %w", err)
 	}
 
-	ids := make([]uuid.UUID, len(meetings))
-	for i, m := range meetings {
-		ids[i] = m.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return meetings, &pagination, nil
 }

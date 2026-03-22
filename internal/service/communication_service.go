@@ -223,24 +223,21 @@ func (s *CommunicationService) ListEmails(
 	params repository.PaginationParams,
 ) ([]*domain.Email, *repository.PaginatedResult, error) {
 	var emails []*domain.Email
+	var total int
 	var err error
 
 	// Tutors can only see their own emails
 	if role == domain.RoleTutor && senderID != nil {
-		emails, err = s.communicationRepo.ListBySender(ctx, *senderID, params)
+		emails, total, err = s.communicationRepo.ListBySender(ctx, *senderID, params)
 	} else {
-		emails, err = s.communicationRepo.ListByTenant(ctx, tenantID, status, params)
+		emails, total, err = s.communicationRepo.ListByTenant(ctx, tenantID, status, params)
 	}
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list emails: %w", err)
 	}
 
-	ids := make([]uuid.UUID, len(emails))
-	for i, e := range emails {
-		ids[i] = e.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return emails, &pagination, nil
 }
@@ -514,11 +511,16 @@ func (s *CommunicationService) SearchEmails(
 	tenantID uuid.UUID,
 	searchTerm string,
 	params repository.PaginationParams,
-) ([]*domain.Email, error) {
+) ([]*domain.Email, *repository.PaginatedResult, error) {
 	if len(searchTerm) < 3 {
-		return nil, fmt.Errorf("search term must be at least 3 characters")
+		return nil, nil, fmt.Errorf("search term must be at least 3 characters")
 	}
-	return s.communicationRepo.SearchEmails(ctx, tenantID, searchTerm, params)
+	emails, total, err := s.communicationRepo.SearchEmails(ctx, tenantID, searchTerm, params)
+	if err != nil {
+		return nil, nil, err
+	}
+	pagination := repository.BuildPaginatedResult(total, params)
+	return emails, &pagination, nil
 }
 
 // ProcessScheduledEmails processes emails that are due to be sent

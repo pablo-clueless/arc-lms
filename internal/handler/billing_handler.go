@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"arc-lms/internal/domain"
 	"arc-lms/internal/pkg/errors"
@@ -32,7 +33,7 @@ func NewBillingHandler(billingService *service.BillingService) *BillingHandler {
 // @Security BearerAuth
 // @Produce json
 // @Param status query string false "Filter by status (PENDING, PAID, OVERDUE, DISPUTED, VOIDED)"
-// @Param cursor query string false "Pagination cursor"
+// @Param page query int false "Page number"
 // @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
 // @Router /billing/invoices [get]
@@ -50,10 +51,16 @@ func (h *BillingHandler) ListInvoices(c *gin.Context) {
 		status = &s
 	}
 
-	params := repository.PaginationParams{Limit: 50, SortOrder: "DESC"}
-	if cursorStr := c.Query("cursor"); cursorStr != "" {
-		cursor, _ := uuid.Parse(cursorStr)
-		params.Cursor = &cursor
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
 	}
 
 	// SuperAdmin sees all invoices, others see only their tenant
@@ -341,15 +348,25 @@ func (h *BillingHandler) ListBillingAdjustments(c *gin.Context) {
 		}
 	}
 
-	params := repository.PaginationParams{Limit: 50}
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
+	}
 
-	adjustments, err := h.billingService.ListBillingAdjustments(c.Request.Context(), targetTenantID, params)
+	adjustments, pagination, err := h.billingService.ListBillingAdjustments(c.Request.Context(), targetTenantID, params)
 	if err != nil {
 		errors.InternalError(c, "failed to list adjustments")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": adjustments})
+	c.JSON(http.StatusOK, gin.H{"data": adjustments, "pagination": pagination})
 }
 
 // GetBillingMetrics godoc
@@ -438,15 +455,25 @@ func (h *BillingHandler) GetUpcomingInvoices(c *gin.Context) {
 		}
 	}
 
-	params := repository.PaginationParams{Limit: 50}
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
+	}
 
-	invoices, err := h.billingService.GetUpcomingInvoices(c.Request.Context(), days, params)
+	invoices, pagination, err := h.billingService.GetUpcomingInvoices(c.Request.Context(), days, params)
 	if err != nil {
 		errors.InternalError(c, "failed to get upcoming invoices")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": invoices})
+	c.JSON(http.StatusOK, gin.H{"data": invoices, "pagination": pagination})
 }
 
 // GetOverdueInvoices godoc
@@ -465,15 +492,25 @@ func (h *BillingHandler) GetOverdueInvoices(c *gin.Context) {
 		return
 	}
 
-	params := repository.PaginationParams{Limit: 50}
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
+	}
 
-	invoices, err := h.billingService.GetOverdueInvoices(c.Request.Context(), params)
+	invoices, pagination, err := h.billingService.GetOverdueInvoices(c.Request.Context(), params)
 	if err != nil {
 		errors.InternalError(c, "failed to get overdue invoices")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": invoices})
+	c.JSON(http.StatusOK, gin.H{"data": invoices, "pagination": pagination})
 }
 
 // ListSubscriptions godoc
@@ -499,7 +536,17 @@ func (h *BillingHandler) ListSubscriptions(c *gin.Context) {
 		status = &s
 	}
 
-	params := repository.PaginationParams{Limit: 50, SortOrder: "DESC"}
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
+	}
 
 	subscriptions, pagination, err := h.billingService.ListSubscriptions(c.Request.Context(), status, params)
 	if err != nil {

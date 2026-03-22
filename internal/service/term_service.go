@@ -84,7 +84,7 @@ func (s *TermService) CreateTerm(
 	}
 
 	// Check if a term with the same ordinal already exists for this session (BR-001)
-	existingTerms, err := s.termRepo.ListBySession(ctx, sessionID, repository.PaginationParams{Limit: 100})
+	existingTerms, _, err := s.termRepo.ListBySession(ctx, sessionID, repository.PaginationParams{Limit: 100})
 	if err != nil {
 		return nil, fmt.Errorf("failed to check existing terms: %w", err)
 	}
@@ -200,7 +200,7 @@ func (s *TermService) UpdateTerm(
 	}
 
 	// Validate no overlap with other terms in the session (BR-002)
-	existingTerms, err := s.termRepo.ListBySession(ctx, term.SessionID, repository.PaginationParams{Limit: 100})
+	existingTerms, _, err := s.termRepo.ListBySession(ctx, term.SessionID, repository.PaginationParams{Limit: 100})
 	if err != nil {
 		return nil, fmt.Errorf("failed to check existing terms: %w", err)
 	}
@@ -282,7 +282,7 @@ func (s *TermService) ListTerms(
 	filters *TermFilters,
 ) ([]*domain.Term, error) {
 	// TODO: Apply filters
-	terms, err := s.termRepo.ListBySession(ctx, sessionID, repository.PaginationParams{Limit: 100})
+	terms, _, err := s.termRepo.ListBySession(ctx, sessionID, repository.PaginationParams{Limit: 100})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list terms: %w", err)
 	}

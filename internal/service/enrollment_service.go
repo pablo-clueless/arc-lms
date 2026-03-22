@@ -146,12 +146,13 @@ func (s *EnrollmentService) ListEnrollments(
 	params repository.PaginationParams,
 ) ([]*domain.Enrollment, *repository.PaginatedResult, error) {
 	var enrollments []*domain.Enrollment
+	var total int
 	var err error
 
 	if sessionID != nil {
-		enrollments, err = s.enrollmentRepo.ListBySession(ctx, *sessionID, params)
+		enrollments, total, err = s.enrollmentRepo.ListBySession(ctx, *sessionID, params)
 	} else if classID != nil {
-		enrollments, err = s.enrollmentRepo.ListByClass(ctx, *classID, params)
+		enrollments, total, err = s.enrollmentRepo.ListByClass(ctx, *classID, params)
 	} else {
 		return nil, nil, fmt.Errorf("at least one filter (classID or sessionID) is required")
 	}
@@ -162,12 +163,7 @@ func (s *EnrollmentService) ListEnrollments(
 
 	// TODO: Filter by status if provided
 
-	// Build pagination result
-	ids := make([]uuid.UUID, len(enrollments))
-	for i, enrollment := range enrollments {
-		ids[i] = enrollment.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return enrollments, &pagination, nil
 }

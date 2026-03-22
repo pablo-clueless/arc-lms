@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"arc-lms/internal/domain"
 	"arc-lms/internal/pkg/errors"
@@ -103,8 +104,13 @@ func (h *TenantHandler) ListTenants(c *gin.Context) {
 
 	// Build pagination params
 	params := repository.PaginationParams{
-		Limit:  20, // Default limit
-		Cursor: nil, // TODO: Parse cursor from query string
+		Limit: 20, // Default limit
+		Page:  1,
+	}
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
 	}
 
 	// Call service

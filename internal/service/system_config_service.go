@@ -251,7 +251,7 @@ func (s *SystemConfigService) ListSystemConfigs(
 		category = filters.Category
 	}
 
-	configs, err := s.configRepo.List(ctx, category, params)
+	configs, total, err := s.configRepo.List(ctx, category, params)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -265,18 +265,8 @@ func (s *SystemConfigService) ListSystemConfigs(
 		}
 	}
 
-	// Build pagination result
-	hasMore := len(configs) > params.Limit
-	if hasMore {
-		configs = configs[:params.Limit]
-	}
-
-	result := &repository.PaginatedResult{
-		HasMore: hasMore,
-		Count:   len(configs),
-	}
-
-	return configs, result, nil
+	pagination := repository.BuildPaginatedResult(total, params)
+	return configs, &pagination, nil
 }
 
 // ListSystemConfigsByCategory lists configs for a specific category

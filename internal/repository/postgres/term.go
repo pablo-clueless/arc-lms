@@ -246,39 +246,36 @@ func (r *TermRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // ListBySession retrieves terms for a session with pagination
-func (r *TermRepository) ListBySession(ctx context.Context, sessionID uuid.UUID, params repository.PaginationParams) ([]*domain.Term, error) {
+func (r *TermRepository) ListBySession(ctx context.Context, sessionID uuid.UUID, params repository.PaginationParams) ([]*domain.Term, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	whereClause := "WHERE session_id = $1"
+	args := []interface{}{sessionID}
+	argIndex := 2
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM terms %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, session_id, ordinal, start_date, end_date,
 			status, holidays, non_instructional_days, description,
 			created_at, updated_at, activated_at, completed_at
 		FROM terms
-		WHERE session_id = $1
-	`
-
-	args := []interface{}{sessionID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
-	}
-
-	query += fmt.Sprintf(" ORDER BY id %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
+		%s ORDER BY id %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
 	rows, err := r.GetDB().QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 	defer rows.Close()
 
@@ -286,16 +283,16 @@ func (r *TermRepository) ListBySession(ctx context.Context, sessionID uuid.UUID,
 	for rows.Next() {
 		term, err := r.scanTermFromRows(rows)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		terms = append(terms, term)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 
-	return terms, nil
+	return terms, total, nil
 }
 
 // scanTermFromRows scans a term from a Rows object

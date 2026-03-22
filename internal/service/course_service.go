@@ -236,15 +236,16 @@ func (s *CourseService) ListCourses(
 	params repository.PaginationParams,
 ) ([]*domain.Course, *repository.PaginatedResult, error) {
 	var courses []*domain.Course
+	var total int
 	var err error
 
 	// Use most specific filter available
 	if classID != nil {
-		courses, err = s.courseRepo.ListByClass(ctx, *classID, params)
+		courses, total, err = s.courseRepo.ListByClass(ctx, *classID, params)
 	} else if termID != nil {
-		courses, err = s.courseRepo.ListByTerm(ctx, *termID, params)
+		courses, total, err = s.courseRepo.ListByTerm(ctx, *termID, params)
 	} else if tutorID != nil {
-		courses, err = s.courseRepo.ListByTutor(ctx, *tutorID, params)
+		courses, total, err = s.courseRepo.ListByTutor(ctx, *tutorID, params)
 	} else {
 		// TODO: Implement ListByTenant in repository or filter results by tenantID
 		return nil, nil, fmt.Errorf("at least one filter (classID, termID, or tutorID) is required")
@@ -254,12 +255,7 @@ func (s *CourseService) ListCourses(
 		return nil, nil, fmt.Errorf("failed to list courses: %w", err)
 	}
 
-	// Build pagination result
-	ids := make([]uuid.UUID, len(courses))
-	for i, course := range courses {
-		ids[i] = course.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return courses, &pagination, nil
 }

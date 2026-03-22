@@ -139,44 +139,51 @@ func (r *SubscriptionRepository) ListByStatus(
 	ctx context.Context,
 	status *domain.SubscriptionStatus,
 	params repository.PaginationParams,
-) ([]*domain.Subscription, error) {
-	query := `
+) ([]*domain.Subscription, int, error) {
+	if err := repository.ValidatePaginationParams(&params); err != nil {
+		return nil, 0, err
+	}
+
+	whereClause := "WHERE 1=1"
+	args := []interface{}{}
+	argIndex := 1
+
+	if status != nil {
+		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
+		args = append(args, *status)
+		argIndex++
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM subscriptions %s", whereClause)
+	var total int
+	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, session_id, status, price_per_student_per_term,
 			currency, start_date, end_date, cancelled_at, cancellation_reason,
 			created_at, updated_at
 		FROM subscriptions
-		WHERE 1=1
-	`
-
-	args := []interface{}{}
-	argIndex := 1
-
-	if status != nil {
-		query += fmt.Sprintf(" AND status = $%d", argIndex)
-		args = append(args, *status)
-		argIndex++
-	}
-
-	if params.Cursor != nil {
-		query += fmt.Sprintf(" AND id < $%d", argIndex)
-		args = append(args, *params.Cursor)
-		argIndex++
-	}
-
-	query += " ORDER BY created_at DESC"
-
-	if params.Limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d", params.Limit)
-	}
+		%s ORDER BY created_at %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list subscriptions: %w", err)
+		return nil, 0, fmt.Errorf("failed to list subscriptions: %w", err)
 	}
 	defer rows.Close()
 
-	return r.scanSubscriptions(rows)
+	subscriptions, err := r.scanSubscriptions(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return subscriptions, total, nil
 }
 
 // ListOverdue retrieves subscriptions that are overdue

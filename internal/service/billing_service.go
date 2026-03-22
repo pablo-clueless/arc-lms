@@ -208,22 +208,19 @@ func (s *BillingService) ListInvoices(
 	var invoices []*domain.Invoice
 	var err error
 
+	var total int
 	if tenantID != nil {
-		invoices, err = s.invoiceRepo.ListByTenant(ctx, *tenantID, status, params)
+		invoices, total, err = s.invoiceRepo.ListByTenant(ctx, *tenantID, status, params)
 	} else {
 		// SuperAdmin can see all invoices
-		invoices, err = s.invoiceRepo.ListAll(ctx, status, params)
+		invoices, total, err = s.invoiceRepo.ListAll(ctx, status, params)
 	}
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list invoices: %w", err)
 	}
 
-	ids := make([]uuid.UUID, len(invoices))
-	for i, inv := range invoices {
-		ids[i] = inv.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return invoices, &pagination, nil
 }
@@ -444,8 +441,13 @@ func (s *BillingService) ListBillingAdjustments(
 	ctx context.Context,
 	tenantID uuid.UUID,
 	params repository.PaginationParams,
-) ([]*domain.BillingAdjustment, error) {
-	return s.invoiceRepo.ListBillingAdjustments(ctx, tenantID, params)
+) ([]*domain.BillingAdjustment, *repository.PaginatedResult, error) {
+	adjustments, total, err := s.invoiceRepo.ListBillingAdjustments(ctx, tenantID, params)
+	if err != nil {
+		return nil, nil, err
+	}
+	pagination := repository.BuildPaginatedResult(total, params)
+	return adjustments, &pagination, nil
 }
 
 // GetBillingMetrics retrieves platform-wide billing metrics (SuperAdmin)
@@ -491,13 +493,23 @@ func (s *BillingService) GetTenantBillingStats(ctx context.Context, tenantID uui
 }
 
 // GetUpcomingInvoices retrieves invoices due within the specified days
-func (s *BillingService) GetUpcomingInvoices(ctx context.Context, withinDays int, params repository.PaginationParams) ([]*domain.Invoice, error) {
-	return s.invoiceRepo.GetUpcomingInvoices(ctx, withinDays, params)
+func (s *BillingService) GetUpcomingInvoices(ctx context.Context, withinDays int, params repository.PaginationParams) ([]*domain.Invoice, *repository.PaginatedResult, error) {
+	invoices, total, err := s.invoiceRepo.GetUpcomingInvoices(ctx, withinDays, params)
+	if err != nil {
+		return nil, nil, err
+	}
+	pagination := repository.BuildPaginatedResult(total, params)
+	return invoices, &pagination, nil
 }
 
 // GetOverdueInvoices retrieves overdue invoices
-func (s *BillingService) GetOverdueInvoices(ctx context.Context, params repository.PaginationParams) ([]*domain.Invoice, error) {
-	return s.invoiceRepo.GetOverdueInvoices(ctx, params)
+func (s *BillingService) GetOverdueInvoices(ctx context.Context, params repository.PaginationParams) ([]*domain.Invoice, *repository.PaginatedResult, error) {
+	invoices, total, err := s.invoiceRepo.GetOverdueInvoices(ctx, params)
+	if err != nil {
+		return nil, nil, err
+	}
+	pagination := repository.BuildPaginatedResult(total, params)
+	return invoices, &pagination, nil
 }
 
 // ProcessOverdueInvoices processes overdue invoices (FR-BIL-006)
@@ -511,7 +523,7 @@ func (s *BillingService) ProcessOverdueInvoices(ctx context.Context) error {
 
 	// Get all overdue invoices
 	params := repository.PaginationParams{Limit: 100}
-	overdueInvoices, err := s.invoiceRepo.GetOverdueInvoices(ctx, params)
+	overdueInvoices, _, err := s.invoiceRepo.GetOverdueInvoices(ctx, params)
 	if err != nil {
 		return fmt.Errorf("failed to get overdue invoices: %w", err)
 	}
@@ -565,16 +577,12 @@ func (s *BillingService) ListSubscriptions(
 		return nil, nil, fmt.Errorf("subscription repository not configured")
 	}
 
-	subscriptions, err := s.subscriptionRepo.ListByStatus(ctx, status, params)
+	subscriptions, total, err := s.subscriptionRepo.ListByStatus(ctx, status, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list subscriptions: %w", err)
 	}
 
-	ids := make([]uuid.UUID, len(subscriptions))
-	for i, sub := range subscriptions {
-		ids[i] = sub.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return subscriptions, &pagination, nil
 }

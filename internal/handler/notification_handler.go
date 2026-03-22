@@ -25,9 +25,9 @@ func NewNotificationHandler(notificationService *service.NotificationService) *N
 
 // ListNotificationsRequest represents query parameters for listing notifications
 type ListNotificationsRequest struct {
-	UnreadOnly bool   `form:"unread_only"`
-	Cursor     string `form:"cursor"`
-	Limit      int    `form:"limit,default=50"`
+	UnreadOnly bool `form:"unread_only"`
+	Page       int  `form:"page,default=1"`
+	Limit      int  `form:"limit,default=50"`
 }
 
 // ListNotifications godoc
@@ -37,7 +37,7 @@ type ListNotificationsRequest struct {
 // @Security BearerAuth
 // @Produce json
 // @Param unread_only query bool false "Only return unread notifications"
-// @Param cursor query string false "Pagination cursor"
+// @Param page query int false "Page number"
 // @Param limit query int false "Number of results (default 50, max 100)"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} errors.ErrorResponse
@@ -65,18 +65,12 @@ func (h *NotificationHandler) ListNotifications(c *gin.Context) {
 	}
 
 	// Build pagination params
-	params := repository.PaginationParams{
-		Limit:     req.Limit,
-		SortOrder: "DESC",
+	params := repository.DefaultPaginationParams()
+	if req.Page > 0 {
+		params.Page = req.Page
 	}
-
-	if req.Cursor != "" {
-		cursor, err := uuid.Parse(req.Cursor)
-		if err != nil {
-			errors.BadRequest(c, "invalid cursor format", nil)
-			return
-		}
-		params.Cursor = &cursor
+	if req.Limit > 0 {
+		params.Limit = req.Limit
 	}
 
 	// Get notifications

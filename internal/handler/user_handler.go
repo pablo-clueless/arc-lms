@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"arc-lms/internal/domain"
 	"arc-lms/internal/pkg/errors"
@@ -172,8 +173,8 @@ func (h *UserHandler) InviteUser(c *gin.Context) {
 // @Param role query string false "Filter by role"
 // @Param status query string false "Filter by status"
 // @Param search query string false "Search by name or email"
+// @Param page query int false "Page number" default(1)
 // @Param limit query int false "Items per page" default(20)
-// @Param cursor query string false "Pagination cursor"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} errors.ErrorResponse
 // @Failure 403 {object} errors.ErrorResponse
@@ -207,13 +208,16 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 	}
 
 	// Build pagination params
-	params := repository.PaginationParams{
-		Limit:  20, // Default limit
-		Cursor: nil, // TODO: Parse cursor from query string
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
 	}
 	if limitStr := c.Query("limit"); limitStr != "" {
-		// Parse limit (omitted for brevity - add proper parsing)
-		params.Limit = 20
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
 	}
 
 	// Call service
@@ -523,8 +527,8 @@ func (h *UserHandler) CreateSuperAdmin(c *gin.Context) {
 // @Tags SuperAdmin
 // @Security BearerAuth
 // @Produce json
+// @Param page query int false "Page number" default(1)
 // @Param limit query int false "Items per page" default(20)
-// @Param cursor query string false "Pagination cursor"
 // @Success 200 {object} map[string]interface{}
 // @Failure 403 {object} errors.ErrorResponse
 // @Router /superadmins [get]
@@ -541,9 +545,16 @@ func (h *UserHandler) ListSuperAdmins(c *gin.Context) {
 		return
 	}
 
-	params := repository.PaginationParams{
-		Limit:     20,
-		SortOrder: "DESC",
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
 	}
 
 	users, pagination, err := h.userService.ListSuperAdmins(c.Request.Context(), actorRole, params)

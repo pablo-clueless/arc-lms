@@ -298,17 +298,12 @@ func (s *TenantService) ListTenants(
 		status = filters.Status
 	}
 
-	tenants, err := s.tenantRepo.List(ctx, status, params)
+	tenants, total, err := s.tenantRepo.List(ctx, status, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list tenants: %w", err)
 	}
 
-	// Build pagination result
-	ids := make([]uuid.UUID, len(tenants))
-	for i, tenant := range tenants {
-		ids[i] = tenant.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return tenants, &pagination, nil
 }

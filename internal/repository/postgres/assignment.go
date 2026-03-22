@@ -145,42 +145,47 @@ func (r *AssignmentRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // ListByCourse retrieves assignments for a course
-func (r *AssignmentRepository) ListByCourse(ctx context.Context, courseID uuid.UUID, status *domain.AssessmentStatus, params repository.PaginationParams) ([]*domain.Assignment, *repository.PaginatedResult, error) {
+func (r *AssignmentRepository) ListByCourse(ctx context.Context, courseID uuid.UUID, status *domain.AssessmentStatus, params repository.PaginationParams) ([]*domain.Assignment, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Build WHERE clause
+	whereClause := "WHERE course_id = $1"
+	args := []interface{}{courseID}
+	argIndex := 2
+
+	if status != nil {
+		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
+		args = append(args, *status)
+		argIndex++
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM assignments %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, course_id, created_by_tutor_id, title, description,
 			attachment_urls, max_marks, submission_deadline, allow_late_submission,
 			hard_cutoff_date, allowed_file_formats, max_file_size, status,
 			questions, created_at, updated_at, published_at
 		FROM assignments
-		WHERE course_id = $1
-	`
+		%s
+		ORDER BY submission_deadline %s, id DESC
+		LIMIT $%d OFFSET $%d
+	`, whereClause, params.SortOrder, argIndex, argIndex+1)
 
-	args := []interface{}{courseID}
-	argIndex := 2
-
-	if status != nil {
-		query += fmt.Sprintf(" AND status = $%d", argIndex)
-		args = append(args, *status)
-		argIndex++
-	}
-
-	if params.Cursor != nil {
-		query += fmt.Sprintf(" AND id < $%d", argIndex)
-		args = append(args, *params.Cursor)
-		argIndex++
-	}
-
-	query += fmt.Sprintf(" ORDER BY submission_deadline DESC, id DESC LIMIT $%d", argIndex)
-	args = append(args, params.Limit+1)
+	args = append(args, params.Limit, params.Offset())
 
 	rows, err := r.GetDB().QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 	defer rows.Close()
 
@@ -188,29 +193,16 @@ func (r *AssignmentRepository) ListByCourse(ctx context.Context, courseID uuid.U
 	for rows.Next() {
 		assignment, err := r.scanAssignmentFromRows(rows)
 		if err != nil {
-			return nil, nil, err
+			return nil, 0, err
 		}
 		assignments = append(assignments, assignment)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 
-	hasMore := len(assignments) > params.Limit
-	var nextCursor *uuid.UUID
-	if hasMore {
-		assignments = assignments[:params.Limit]
-		nextCursor = &assignments[len(assignments)-1].ID
-	}
-
-	pagination := &repository.PaginatedResult{
-		HasMore:    hasMore,
-		NextCursor: nextCursor,
-		Count:      len(assignments),
-	}
-
-	return assignments, pagination, nil
+	return assignments, total, nil
 }
 
 // CreateSubmission creates an assignment submission
@@ -318,35 +310,33 @@ func (r *AssignmentRepository) UpdateSubmission(ctx context.Context, submission 
 }
 
 // ListSubmissionsByAssignment retrieves all submissions for an assignment
-func (r *AssignmentRepository) ListSubmissionsByAssignment(ctx context.Context, assignmentID uuid.UUID, params repository.PaginationParams) ([]*domain.AssignmentSubmission, *repository.PaginatedResult, error) {
+func (r *AssignmentRepository) ListSubmissionsByAssignment(ctx context.Context, assignmentID uuid.UUID, params repository.PaginationParams) ([]*domain.AssignmentSubmission, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM assignment_submissions WHERE assignment_id = $1"
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, assignmentID).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, assignment_id, student_id, status, submitted_at,
 			is_late, file_urls, answer_text, score, feedback, ip_address,
 			created_at, updated_at, graded_at, graded_by
 		FROM assignment_submissions
 		WHERE assignment_id = $1
-	`
+		ORDER BY submitted_at %s NULLS LAST, id DESC
+		LIMIT $2 OFFSET $3
+	`, params.SortOrder)
 
-	args := []interface{}{assignmentID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		query += fmt.Sprintf(" AND id < $%d", argIndex)
-		args = append(args, *params.Cursor)
-		argIndex++
-	}
-
-	query += fmt.Sprintf(" ORDER BY submitted_at DESC NULLS LAST, id DESC LIMIT $%d", argIndex)
-	args = append(args, params.Limit+1)
-
-	rows, err := r.GetDB().QueryContext(ctx, query, args...)
+	rows, err := r.GetDB().QueryContext(ctx, query, assignmentID, params.Limit, params.Offset())
 	if err != nil {
-		return nil, nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 	defer rows.Close()
 
@@ -354,29 +344,16 @@ func (r *AssignmentRepository) ListSubmissionsByAssignment(ctx context.Context, 
 	for rows.Next() {
 		submission, err := r.scanSubmissionFromRows(rows)
 		if err != nil {
-			return nil, nil, err
+			return nil, 0, err
 		}
 		submissions = append(submissions, submission)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 
-	hasMore := len(submissions) > params.Limit
-	var nextCursor *uuid.UUID
-	if hasMore {
-		submissions = submissions[:params.Limit]
-		nextCursor = &submissions[len(submissions)-1].ID
-	}
-
-	pagination := &repository.PaginatedResult{
-		HasMore:    hasMore,
-		NextCursor: nextCursor,
-		Count:      len(submissions),
-	}
-
-	return submissions, pagination, nil
+	return submissions, total, nil
 }
 
 func (r *AssignmentRepository) scanAssignment(row *sql.Row) (*domain.Assignment, error) {

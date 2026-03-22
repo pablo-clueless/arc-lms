@@ -217,24 +217,20 @@ func (s *ClassService) ListClasses(
 	params repository.PaginationParams,
 ) ([]*domain.Class, *repository.PaginatedResult, error) {
 	var classes []*domain.Class
+	var total int
 	var err error
 
 	if sessionID != nil {
-		classes, err = s.classRepo.ListBySession(ctx, *sessionID, params)
+		classes, total, err = s.classRepo.ListBySession(ctx, *sessionID, params)
 	} else {
-		classes, err = s.classRepo.ListByTenant(ctx, tenantID, params)
+		classes, total, err = s.classRepo.ListByTenant(ctx, tenantID, params)
 	}
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list classes: %w", err)
 	}
 
-	// Build pagination result
-	ids := make([]uuid.UUID, len(classes))
-	for i, class := range classes {
-		ids[i] = class.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return classes, &pagination, nil
 }

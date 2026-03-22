@@ -246,12 +246,24 @@ func (r *ProgressRepository) Update(ctx context.Context, progress *domain.Progre
 }
 
 // ListByStudent retrieves all progress records for a student
-func (r *ProgressRepository) ListByStudent(ctx context.Context, studentID uuid.UUID, params repository.PaginationParams) ([]*domain.Progress, error) {
+func (r *ProgressRepository) ListByStudent(ctx context.Context, studentID uuid.UUID, params repository.PaginationParams) ([]*domain.Progress, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	whereClause := "WHERE student_id = $1"
+	args := []interface{}{studentID}
+	argIndex := 2
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM progress %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, student_id, course_id, term_id, class_id,
 			status, quiz_scores, assignment_scores, examination_score,
@@ -259,26 +271,16 @@ func (r *ProgressRepository) ListByStudent(ctx context.Context, studentID uuid.U
 			class_position, is_flagged, flag_reason,
 			created_at, updated_at, completed_at
 		FROM progress
-		WHERE student_id = $1
-	`
+		%s ORDER BY created_at %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
-	args := []interface{}{studentID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	records, err := r.queryProgressRecords(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	query += fmt.Sprintf(" ORDER BY created_at %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryProgressRecords(ctx, query, args...)
+	return records, total, nil
 }
 
 // ListByStudentAndTerm retrieves progress records for a student in a specific term
@@ -299,12 +301,24 @@ func (r *ProgressRepository) ListByStudentAndTerm(ctx context.Context, studentID
 }
 
 // ListByCourse retrieves progress records for all students in a course
-func (r *ProgressRepository) ListByCourse(ctx context.Context, courseID uuid.UUID, params repository.PaginationParams) ([]*domain.Progress, error) {
+func (r *ProgressRepository) ListByCourse(ctx context.Context, courseID uuid.UUID, params repository.PaginationParams) ([]*domain.Progress, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	whereClause := "WHERE course_id = $1"
+	args := []interface{}{courseID}
+	argIndex := 2
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM progress %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, student_id, course_id, term_id, class_id,
 			status, quiz_scores, assignment_scores, examination_score,
@@ -312,26 +326,16 @@ func (r *ProgressRepository) ListByCourse(ctx context.Context, courseID uuid.UUI
 			class_position, is_flagged, flag_reason,
 			created_at, updated_at, completed_at
 		FROM progress
-		WHERE course_id = $1
-	`
+		%s ORDER BY created_at %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
-	args := []interface{}{courseID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	records, err := r.queryProgressRecords(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	query += fmt.Sprintf(" ORDER BY created_at %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryProgressRecords(ctx, query, args...)
+	return records, total, nil
 }
 
 // ListByCourseAndTerm retrieves progress records for all students in a course for a term
@@ -352,12 +356,24 @@ func (r *ProgressRepository) ListByCourseAndTerm(ctx context.Context, courseID, 
 }
 
 // ListByClass retrieves progress records for all students in a class
-func (r *ProgressRepository) ListByClass(ctx context.Context, classID uuid.UUID, params repository.PaginationParams) ([]*domain.Progress, error) {
+func (r *ProgressRepository) ListByClass(ctx context.Context, classID uuid.UUID, params repository.PaginationParams) ([]*domain.Progress, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	whereClause := "WHERE class_id = $1"
+	args := []interface{}{classID}
+	argIndex := 2
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM progress %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, student_id, course_id, term_id, class_id,
 			status, quiz_scores, assignment_scores, examination_score,
@@ -365,26 +381,16 @@ func (r *ProgressRepository) ListByClass(ctx context.Context, classID uuid.UUID,
 			class_position, is_flagged, flag_reason,
 			created_at, updated_at, completed_at
 		FROM progress
-		WHERE class_id = $1
-	`
+		%s ORDER BY created_at %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
-	args := []interface{}{classID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	records, err := r.queryProgressRecords(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	query += fmt.Sprintf(" ORDER BY created_at %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryProgressRecords(ctx, query, args...)
+	return records, total, nil
 }
 
 // ListByClassAndTerm retrieves progress records for all students in a class for a term
@@ -405,12 +411,24 @@ func (r *ProgressRepository) ListByClassAndTerm(ctx context.Context, classID, te
 }
 
 // ListFlaggedByTenant retrieves all flagged progress records for a tenant
-func (r *ProgressRepository) ListFlaggedByTenant(ctx context.Context, tenantID uuid.UUID, params repository.PaginationParams) ([]*domain.Progress, error) {
+func (r *ProgressRepository) ListFlaggedByTenant(ctx context.Context, tenantID uuid.UUID, params repository.PaginationParams) ([]*domain.Progress, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	whereClause := "WHERE tenant_id = $1 AND is_flagged = true"
+	args := []interface{}{tenantID}
+	argIndex := 2
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM progress %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, student_id, course_id, term_id, class_id,
 			status, quiz_scores, assignment_scores, examination_score,
@@ -418,26 +436,16 @@ func (r *ProgressRepository) ListFlaggedByTenant(ctx context.Context, tenantID u
 			class_position, is_flagged, flag_reason,
 			created_at, updated_at, completed_at
 		FROM progress
-		WHERE tenant_id = $1 AND is_flagged = true
-	`
+		%s ORDER BY updated_at %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
-	args := []interface{}{tenantID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	records, err := r.queryProgressRecords(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	query += fmt.Sprintf(" ORDER BY updated_at %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryProgressRecords(ctx, query, args...)
+	return records, total, nil
 }
 
 // ListFlaggedByCourse retrieves all flagged progress records for a course

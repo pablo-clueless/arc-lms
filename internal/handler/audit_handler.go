@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"arc-lms/internal/domain"
@@ -37,7 +37,7 @@ type ListAuditLogsRequest struct {
 	IsSensitive  string `form:"is_sensitive"`
 	StartDate    string `form:"start_date"`
 	EndDate      string `form:"end_date"`
-	Cursor       string `form:"cursor"`
+	Page         int    `form:"page,default=1"`
 	Limit        int    `form:"limit,default=50"`
 }
 
@@ -56,7 +56,7 @@ type ListAuditLogsRequest struct {
 // @Param is_sensitive query bool false "Filter sensitive actions only"
 // @Param start_date query string false "Filter from date (RFC3339 format)"
 // @Param end_date query string false "Filter to date (RFC3339 format)"
-// @Param cursor query string false "Pagination cursor"
+// @Param page query int false "Page number"
 // @Param limit query int false "Number of results (default 50, max 100)"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} errors.ErrorResponse
@@ -176,18 +176,12 @@ func (h *AuditHandler) ListAuditLogs(c *gin.Context) {
 	}
 
 	// Build pagination params
-	params := repository.PaginationParams{
-		Limit:     req.Limit,
-		SortOrder: "DESC",
+	params := repository.DefaultPaginationParams()
+	if req.Page > 0 {
+		params.Page = req.Page
 	}
-
-	if req.Cursor != "" {
-		cursor, err := uuid.Parse(req.Cursor)
-		if err != nil {
-			errors.BadRequest(c, "invalid cursor format", nil)
-			return
-		}
-		params.Cursor = &cursor
+	if req.Limit > 0 {
+		params.Limit = req.Limit
 	}
 
 	// Get audit logs
@@ -285,7 +279,7 @@ func (h *AuditHandler) GetAuditLog(c *gin.Context) {
 // @Produce json
 // @Param resource_type query string true "Resource type (USER, TENANT, CLASS, etc.)"
 // @Param resource_id query string true "Resource ID"
-// @Param cursor query string false "Pagination cursor"
+// @Param page query int false "Page number"
 // @Param limit query int false "Number of results (default 50, max 100)"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} errors.ErrorResponse
@@ -329,25 +323,16 @@ func (h *AuditHandler) GetResourceAuditTrail(c *gin.Context) {
 	}
 
 	// Build pagination params
-	params := repository.PaginationParams{
-		Limit:     50,
-		SortOrder: "DESC",
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
 	}
-
 	if limitStr := c.Query("limit"); limitStr != "" {
-		var limit int
-		if _, err := fmt.Sscanf(limitStr, "%d", &limit); err == nil && limit > 0 {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
 			params.Limit = limit
 		}
-	}
-
-	if cursorStr := c.Query("cursor"); cursorStr != "" {
-		cursor, err := uuid.Parse(cursorStr)
-		if err != nil {
-			errors.BadRequest(c, "invalid cursor format", nil)
-			return
-		}
-		params.Cursor = &cursor
 	}
 
 	// Get audit trail

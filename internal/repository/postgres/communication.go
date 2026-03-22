@@ -172,8 +172,31 @@ func (r *CommunicationRepository) ListByTenant(
 	tenantID uuid.UUID,
 	status *domain.CommunicationStatus,
 	params repository.PaginationParams,
-) ([]*domain.Email, error) {
-	query := `
+) ([]*domain.Email, int, error) {
+	if err := repository.ValidatePaginationParams(&params); err != nil {
+		return nil, 0, err
+	}
+
+	// Build WHERE clause
+	whereClause := "WHERE tenant_id = $1"
+	args := []interface{}{tenantID}
+	argIndex := 2
+
+	if status != nil {
+		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
+		args = append(args, *status)
+		argIndex++
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM emails %s", whereClause)
+	var total int
+	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count emails: %w", err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, sender_id, subject, body, html_body,
 			recipient_scope, target_class_id, target_course_id, specific_user_ids,
@@ -181,37 +204,25 @@ func (r *CommunicationRepository) ListByTenant(
 			total_recipients, success_count, failure_count,
 			created_at, updated_at, cancelled_at
 		FROM emails
-		WHERE tenant_id = $1
-	`
+		%s
+		ORDER BY created_at %s
+		LIMIT $%d OFFSET $%d
+	`, whereClause, params.SortOrder, argIndex, argIndex+1)
 
-	args := []interface{}{tenantID}
-	argIndex := 2
-
-	if status != nil {
-		query += fmt.Sprintf(" AND status = $%d", argIndex)
-		args = append(args, *status)
-		argIndex++
-	}
-
-	if params.Cursor != nil {
-		query += fmt.Sprintf(" AND created_at < (SELECT created_at FROM emails WHERE id = $%d)", argIndex)
-		args = append(args, *params.Cursor)
-		argIndex++
-	}
-
-	query += " ORDER BY created_at DESC"
-
-	if params.Limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d", params.Limit)
-	}
+	args = append(args, params.Limit, params.Offset())
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list emails: %w", err)
+		return nil, 0, fmt.Errorf("failed to list emails: %w", err)
 	}
 	defer rows.Close()
 
-	return r.scanEmails(rows)
+	emails, err := r.scanEmails(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return emails, total, nil
 }
 
 // ListBySender retrieves emails sent by a specific user
@@ -219,8 +230,20 @@ func (r *CommunicationRepository) ListBySender(
 	ctx context.Context,
 	senderID uuid.UUID,
 	params repository.PaginationParams,
-) ([]*domain.Email, error) {
-	query := `
+) ([]*domain.Email, int, error) {
+	if err := repository.ValidatePaginationParams(&params); err != nil {
+		return nil, 0, err
+	}
+
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM emails WHERE sender_id = $1"
+	var total int
+	if err := r.db.QueryRowContext(ctx, countQuery, senderID).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count emails: %w", err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, sender_id, subject, body, html_body,
 			recipient_scope, target_class_id, target_course_id, specific_user_ids,
@@ -229,28 +252,22 @@ func (r *CommunicationRepository) ListBySender(
 			created_at, updated_at, cancelled_at
 		FROM emails
 		WHERE sender_id = $1
-	`
+		ORDER BY created_at %s
+		LIMIT $2 OFFSET $3
+	`, params.SortOrder)
 
-	args := []interface{}{senderID}
-
-	if params.Cursor != nil {
-		query += " AND created_at < (SELECT created_at FROM emails WHERE id = $2)"
-		args = append(args, *params.Cursor)
-	}
-
-	query += " ORDER BY created_at DESC"
-
-	if params.Limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d", params.Limit)
-	}
-
-	rows, err := r.db.QueryContext(ctx, query, args...)
+	rows, err := r.db.QueryContext(ctx, query, senderID, params.Limit, params.Offset())
 	if err != nil {
-		return nil, fmt.Errorf("failed to list emails: %w", err)
+		return nil, 0, fmt.Errorf("failed to list emails: %w", err)
 	}
 	defer rows.Close()
 
-	return r.scanEmails(rows)
+	emails, err := r.scanEmails(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return emails, total, nil
 }
 
 // ListScheduled retrieves scheduled emails that are ready to be sent
@@ -639,10 +656,22 @@ func (r *CommunicationRepository) SearchEmails(
 	tenantID uuid.UUID,
 	searchTerm string,
 	params repository.PaginationParams,
-) ([]*domain.Email, error) {
+) ([]*domain.Email, int, error) {
+	if err := repository.ValidatePaginationParams(&params); err != nil {
+		return nil, 0, err
+	}
+
 	searchPattern := "%" + strings.ToLower(searchTerm) + "%"
 
-	query := `
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM emails WHERE tenant_id = $1 AND (LOWER(subject) LIKE $2 OR LOWER(body) LIKE $2)"
+	var total int
+	if err := r.db.QueryRowContext(ctx, countQuery, tenantID, searchPattern).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count emails: %w", err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, sender_id, subject, body, html_body,
 			recipient_scope, target_class_id, target_course_id, specific_user_ids,
@@ -651,20 +680,20 @@ func (r *CommunicationRepository) SearchEmails(
 			created_at, updated_at, cancelled_at
 		FROM emails
 		WHERE tenant_id = $1 AND (LOWER(subject) LIKE $2 OR LOWER(body) LIKE $2)
-		ORDER BY created_at DESC
-	`
+		ORDER BY created_at %s
+		LIMIT $3 OFFSET $4
+	`, params.SortOrder)
 
-	args := []interface{}{tenantID, searchPattern}
-
-	if params.Limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d", params.Limit)
-	}
-
-	rows, err := r.db.QueryContext(ctx, query, args...)
+	rows, err := r.db.QueryContext(ctx, query, tenantID, searchPattern, params.Limit, params.Offset())
 	if err != nil {
-		return nil, fmt.Errorf("failed to search emails: %w", err)
+		return nil, 0, fmt.Errorf("failed to search emails: %w", err)
 	}
 	defer rows.Close()
 
-	return r.scanEmails(rows)
+	emails, err := r.scanEmails(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return emails, total, nil
 }

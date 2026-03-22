@@ -473,16 +473,12 @@ func (s *ProgressService) ListStudentProgress(
 	studentID uuid.UUID,
 	params repository.PaginationParams,
 ) ([]*domain.Progress, *repository.PaginatedResult, error) {
-	progresses, err := s.progressRepo.ListByStudent(ctx, studentID, params)
+	progresses, total, err := s.progressRepo.ListByStudent(ctx, studentID, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list progress: %w", err)
 	}
 
-	ids := make([]uuid.UUID, len(progresses))
-	for i, p := range progresses {
-		ids[i] = p.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return progresses, &pagination, nil
 }
@@ -493,16 +489,12 @@ func (s *ProgressService) ListCourseProgress(
 	courseID uuid.UUID,
 	params repository.PaginationParams,
 ) ([]*domain.Progress, *repository.PaginatedResult, error) {
-	progresses, err := s.progressRepo.ListByCourse(ctx, courseID, params)
+	progresses, total, err := s.progressRepo.ListByCourse(ctx, courseID, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list progress: %w", err)
 	}
 
-	ids := make([]uuid.UUID, len(progresses))
-	for i, p := range progresses {
-		ids[i] = p.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return progresses, &pagination, nil
 }
@@ -513,16 +505,12 @@ func (s *ProgressService) ListClassProgress(
 	classID uuid.UUID,
 	params repository.PaginationParams,
 ) ([]*domain.Progress, *repository.PaginatedResult, error) {
-	progresses, err := s.progressRepo.ListByClass(ctx, classID, params)
+	progresses, total, err := s.progressRepo.ListByClass(ctx, classID, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list progress: %w", err)
 	}
 
-	ids := make([]uuid.UUID, len(progresses))
-	for i, p := range progresses {
-		ids[i] = p.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return progresses, &pagination, nil
 }
@@ -533,16 +521,12 @@ func (s *ProgressService) ListFlaggedStudents(
 	tenantID uuid.UUID,
 	params repository.PaginationParams,
 ) ([]*domain.Progress, *repository.PaginatedResult, error) {
-	progresses, err := s.progressRepo.ListFlaggedByTenant(ctx, tenantID, params)
+	progresses, total, err := s.progressRepo.ListFlaggedByTenant(ctx, tenantID, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list flagged students: %w", err)
 	}
 
-	ids := make([]uuid.UUID, len(progresses))
-	for i, p := range progresses {
-		ids[i] = p.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return progresses, &pagination, nil
 }

@@ -80,40 +80,41 @@ func (r *NotificationRepository) GetByID(ctx context.Context, id uuid.UUID) (*do
 }
 
 // ListByUser retrieves notifications for a user with pagination
-func (r *NotificationRepository) ListByUser(ctx context.Context, userID uuid.UUID, unreadOnly bool, params repository.PaginationParams) ([]*domain.Notification, *repository.PaginatedResult, error) {
+func (r *NotificationRepository) ListByUser(ctx context.Context, userID uuid.UUID, unreadOnly bool, params repository.PaginationParams) ([]*domain.Notification, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	whereClause := "WHERE user_id = $1"
+	args := []interface{}{userID}
+	argIndex := 2
+
+	if unreadOnly {
+		whereClause += " AND is_read = FALSE"
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM notifications %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, user_id, event_type, title, body,
 			channels, priority, action_url, resource_type, resource_id,
 			is_read, read_at, delivered_at, failed_at, failure_reason,
 			created_at, updated_at
 		FROM notifications
-		WHERE user_id = $1
-	`
-
-	args := []interface{}{userID}
-	argIndex := 2
-
-	if unreadOnly {
-		query += " AND is_read = FALSE"
-	}
-
-	if params.Cursor != nil {
-		query += fmt.Sprintf(" AND id < $%d", argIndex)
-		args = append(args, *params.Cursor)
-		argIndex++
-	}
-
-	query += fmt.Sprintf(" ORDER BY created_at DESC, id DESC LIMIT $%d", argIndex)
-	args = append(args, params.Limit+1)
+		%s ORDER BY created_at %s, id %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
 	rows, err := r.GetDB().QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 	defer rows.Close()
 
@@ -121,30 +122,16 @@ func (r *NotificationRepository) ListByUser(ctx context.Context, userID uuid.UUI
 	for rows.Next() {
 		notification, err := r.scanNotificationFromRows(rows)
 		if err != nil {
-			return nil, nil, err
+			return nil, 0, err
 		}
 		notifications = append(notifications, notification)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 
-	// Build pagination result
-	hasMore := len(notifications) > params.Limit
-	var nextCursor *uuid.UUID
-	if hasMore {
-		notifications = notifications[:params.Limit]
-		nextCursor = &notifications[len(notifications)-1].ID
-	}
-
-	pagination := &repository.PaginatedResult{
-		HasMore:    hasMore,
-		NextCursor: nextCursor,
-		Count:      len(notifications),
-	}
-
-	return notifications, pagination, nil
+	return notifications, total, nil
 }
 
 // MarkAsRead marks a notification as read

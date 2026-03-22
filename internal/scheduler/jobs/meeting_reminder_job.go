@@ -73,7 +73,7 @@ func (j *MeetingReminderJob) Run(ctx context.Context) error {
 		windowEnd := windowStart.Add(time.Duration(j.interval))
 
 		// Get meetings in this window
-		meetings, err := j.meetingRepo.ListByDateRange(ctx, uuid.Nil, windowStart, windowEnd, repository.PaginationParams{Limit: 100})
+		meetings, _, err := j.meetingRepo.ListByDateRange(ctx, uuid.Nil, windowStart, windowEnd, repository.PaginationParams{Limit: 100})
 		if err != nil {
 			j.logger.Printf("[MeetingReminderJob] Failed to list meetings: %v", err)
 			continue
@@ -104,7 +104,7 @@ func (j *MeetingReminderJob) sendMeetingReminders(ctx context.Context, meeting *
 	}
 
 	// Get enrolled students in the class
-	enrollments, err := j.enrollmentRepo.ListByClass(ctx, meeting.ClassID, repository.PaginationParams{Limit: 1000})
+	enrollments, _, err := j.enrollmentRepo.ListByClass(ctx, meeting.ClassID, repository.PaginationParams{Limit: 1000})
 	if err != nil {
 		return 0, fmt.Errorf("failed to get enrollments: %w", err)
 	}

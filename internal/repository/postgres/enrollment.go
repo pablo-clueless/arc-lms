@@ -210,12 +210,20 @@ func (r *EnrollmentRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // ListByStudent retrieves enrollments for a student with pagination
-func (r *EnrollmentRepository) ListByStudent(ctx context.Context, studentID uuid.UUID, params repository.PaginationParams) ([]*domain.Enrollment, error) {
+func (r *EnrollmentRepository) ListByStudent(ctx context.Context, studentID uuid.UUID, params repository.PaginationParams) ([]*domain.Enrollment, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM enrollments WHERE student_id = $1"
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, studentID).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, student_id, class_id, session_id,
 			status, enrollment_date, withdrawal_date, withdrawal_reason,
@@ -224,34 +232,33 @@ func (r *EnrollmentRepository) ListByStudent(ctx context.Context, studentID uuid
 			created_at, updated_at
 		FROM enrollments
 		WHERE student_id = $1
-	`
+		ORDER BY id %s
+		LIMIT $2 OFFSET $3
+	`, params.SortOrder)
 
-	args := []interface{}{studentID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	enrollments, err := r.queryEnrollments(ctx, query, studentID, params.Limit, params.Offset())
+	if err != nil {
+		return nil, 0, err
 	}
 
-	query += fmt.Sprintf(" ORDER BY id %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryEnrollments(ctx, query, args...)
+	return enrollments, total, nil
 }
 
 // ListByClass retrieves enrollments for a class with pagination
-func (r *EnrollmentRepository) ListByClass(ctx context.Context, classID uuid.UUID, params repository.PaginationParams) ([]*domain.Enrollment, error) {
+func (r *EnrollmentRepository) ListByClass(ctx context.Context, classID uuid.UUID, params repository.PaginationParams) ([]*domain.Enrollment, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM enrollments WHERE class_id = $1"
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, classID).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, student_id, class_id, session_id,
 			status, enrollment_date, withdrawal_date, withdrawal_reason,
@@ -260,34 +267,33 @@ func (r *EnrollmentRepository) ListByClass(ctx context.Context, classID uuid.UUI
 			created_at, updated_at
 		FROM enrollments
 		WHERE class_id = $1
-	`
+		ORDER BY id %s
+		LIMIT $2 OFFSET $3
+	`, params.SortOrder)
 
-	args := []interface{}{classID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	enrollments, err := r.queryEnrollments(ctx, query, classID, params.Limit, params.Offset())
+	if err != nil {
+		return nil, 0, err
 	}
 
-	query += fmt.Sprintf(" ORDER BY id %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryEnrollments(ctx, query, args...)
+	return enrollments, total, nil
 }
 
 // ListBySession retrieves enrollments for a session with pagination
-func (r *EnrollmentRepository) ListBySession(ctx context.Context, sessionID uuid.UUID, params repository.PaginationParams) ([]*domain.Enrollment, error) {
+func (r *EnrollmentRepository) ListBySession(ctx context.Context, sessionID uuid.UUID, params repository.PaginationParams) ([]*domain.Enrollment, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM enrollments WHERE session_id = $1"
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, sessionID).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, student_id, class_id, session_id,
 			status, enrollment_date, withdrawal_date, withdrawal_reason,
@@ -296,25 +302,16 @@ func (r *EnrollmentRepository) ListBySession(ctx context.Context, sessionID uuid
 			created_at, updated_at
 		FROM enrollments
 		WHERE session_id = $1
-	`
+		ORDER BY id %s
+		LIMIT $2 OFFSET $3
+	`, params.SortOrder)
 
-	args := []interface{}{sessionID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	enrollments, err := r.queryEnrollments(ctx, query, sessionID, params.Limit, params.Offset())
+	if err != nil {
+		return nil, 0, err
 	}
 
-	query += fmt.Sprintf(" ORDER BY id %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryEnrollments(ctx, query, args...)
+	return enrollments, total, nil
 }
 
 // queryEnrollments executes a query and returns a list of enrollments

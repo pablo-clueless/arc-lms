@@ -141,11 +141,12 @@ func (s *AuditService) GetAuditLogs(
 	filters *domain.AuditFilters,
 	params repository.PaginationParams,
 ) ([]*domain.AuditLog, *repository.PaginatedResult, error) {
-	logs, pagination, err := s.auditRepo.List(ctx, filters, params)
+	logs, total, err := s.auditRepo.List(ctx, filters, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get audit logs: %w", err)
 	}
-	return logs, pagination, nil
+	pagination := repository.BuildPaginatedResult(total, params)
+	return logs, &pagination, nil
 }
 
 // GetAuditLog gets a specific audit log by ID
@@ -164,11 +165,12 @@ func (s *AuditService) GetResourceAuditTrail(
 	resourceID uuid.UUID,
 	params repository.PaginationParams,
 ) ([]*domain.AuditLog, *repository.PaginatedResult, error) {
-	logs, pagination, err := s.auditRepo.GetByResource(ctx, resourceType, resourceID, params)
+	logs, total, err := s.auditRepo.GetByResource(ctx, resourceType, resourceID, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get resource audit trail: %w", err)
 	}
-	return logs, pagination, nil
+	pagination := repository.BuildPaginatedResult(total, params)
+	return logs, &pagination, nil
 }
 
 // GetTenantAuditLogs gets all audit logs for a specific tenant
@@ -184,11 +186,12 @@ func (s *AuditService) GetTenantAuditLogs(
 	}
 	filters.TenantID = &tenantID
 
-	logs, pagination, err := s.auditRepo.List(ctx, filters, params)
+	logs, total, err := s.auditRepo.List(ctx, filters, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get tenant audit logs: %w", err)
 	}
-	return logs, pagination, nil
+	pagination := repository.BuildPaginatedResult(total, params)
+	return logs, &pagination, nil
 }
 
 // GetUserAuditLogs gets all audit logs for actions performed by a specific user
@@ -201,11 +204,12 @@ func (s *AuditService) GetUserAuditLogs(
 		ActorUserID: &userID,
 	}
 
-	logs, pagination, err := s.auditRepo.List(ctx, filters, params)
+	logs, total, err := s.auditRepo.List(ctx, filters, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get user audit logs: %w", err)
 	}
-	return logs, pagination, nil
+	pagination := repository.BuildPaginatedResult(total, params)
+	return logs, &pagination, nil
 }
 
 // GetSensitiveAuditLogs gets all sensitive audit logs (SUPER_ADMIN only)
@@ -221,11 +225,12 @@ func (s *AuditService) GetSensitiveAuditLogs(
 	isSensitive := true
 	filters.IsSensitive = &isSensitive
 
-	logs, pagination, err := s.auditRepo.List(ctx, filters, params)
+	logs, total, err := s.auditRepo.List(ctx, filters, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get sensitive audit logs: %w", err)
 	}
-	return logs, pagination, nil
+	pagination := repository.BuildPaginatedResult(total, params)
+	return logs, &pagination, nil
 }
 
 // GetAuditLogsByDateRange gets audit logs within a specific date range
@@ -242,11 +247,12 @@ func (s *AuditService) GetAuditLogsByDateRange(
 	filters.StartDate = &startDate
 	filters.EndDate = &endDate
 
-	logs, pagination, err := s.auditRepo.List(ctx, filters, params)
+	logs, total, err := s.auditRepo.List(ctx, filters, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get audit logs by date range: %w", err)
 	}
-	return logs, pagination, nil
+	pagination := repository.BuildPaginatedResult(total, params)
+	return logs, &pagination, nil
 }
 
 // calculateChanges compares before and after states and returns field-level changes

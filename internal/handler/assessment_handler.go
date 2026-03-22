@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"arc-lms/internal/domain"
 	"arc-lms/internal/pkg/errors"
@@ -34,7 +35,7 @@ func NewAssessmentHandler(assessmentService *service.AssessmentService) *Assessm
 // @Produce json
 // @Param course_id query string true "Course ID"
 // @Param status query string false "Filter by status (DRAFT, PUBLISHED, ARCHIVED)"
-// @Param cursor query string false "Pagination cursor"
+// @Param page query int false "Page number"
 // @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
 // @Router /courses/{course_id}/quizzes [get]
@@ -52,10 +53,16 @@ func (h *AssessmentHandler) ListQuizzes(c *gin.Context) {
 		status = &s
 	}
 
-	params := repository.PaginationParams{Limit: 50, SortOrder: "DESC"}
-	if cursorStr := c.Query("cursor"); cursorStr != "" {
-		cursor, _ := uuid.Parse(cursorStr)
-		params.Cursor = &cursor
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
 	}
 
 	quizzes, pagination, err := h.assessmentService.ListQuizzesByCourse(c.Request.Context(), courseID, status, params)
@@ -337,6 +344,8 @@ func (h *AssessmentHandler) GradeQuiz(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Param id path string true "Quiz ID"
+// @Param page query int false "Page number"
+// @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
 // @Router /courses/{course_id}/quizzes/{id}/submissions [get]
 func (h *AssessmentHandler) ListQuizSubmissions(c *gin.Context) {
@@ -346,7 +355,17 @@ func (h *AssessmentHandler) ListQuizSubmissions(c *gin.Context) {
 		return
 	}
 
-	params := repository.PaginationParams{Limit: 50, SortOrder: "DESC"}
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
+	}
 	submissions, pagination, err := h.assessmentService.ListQuizSubmissions(c.Request.Context(), quizID, params)
 	if err != nil {
 		errors.InternalError(c, "failed to list submissions")
@@ -380,7 +399,17 @@ func (h *AssessmentHandler) ListAssignments(c *gin.Context) {
 		status = &s
 	}
 
-	params := repository.PaginationParams{Limit: 50, SortOrder: "DESC"}
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
+	}
 	assignments, pagination, err := h.assessmentService.ListAssignmentsByCourse(c.Request.Context(), courseID, status, params)
 	if err != nil {
 		errors.InternalError(c, "failed to list assignments")
@@ -606,6 +635,8 @@ func (h *AssessmentHandler) GradeAssignment(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Param id path string true "Assignment ID"
+// @Param page query int false "Page number"
+// @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
 // @Router /courses/{course_id}/assignments/{id}/submissions [get]
 func (h *AssessmentHandler) ListAssignmentSubmissions(c *gin.Context) {
@@ -615,7 +646,17 @@ func (h *AssessmentHandler) ListAssignmentSubmissions(c *gin.Context) {
 		return
 	}
 
-	params := repository.PaginationParams{Limit: 50, SortOrder: "DESC"}
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
+	}
 	submissions, pagination, err := h.assessmentService.ListAssignmentSubmissions(c.Request.Context(), assignmentID, params)
 	if err != nil {
 		errors.InternalError(c, "failed to list submissions")

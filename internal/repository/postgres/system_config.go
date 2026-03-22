@@ -188,44 +188,41 @@ func (r *SystemConfigRepository) Delete(ctx context.Context, id uuid.UUID) error
 }
 
 // List retrieves all system configs with optional category filter
-func (r *SystemConfigRepository) List(ctx context.Context, category *domain.SystemConfigCategory, params repository.PaginationParams) ([]*domain.SystemConfig, error) {
+func (r *SystemConfigRepository) List(ctx context.Context, category *domain.SystemConfigCategory, params repository.PaginationParams) ([]*domain.SystemConfig, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
-		SELECT
-			id, key, value, description, category, is_sensitive,
-			created_by, updated_by, created_at, updated_at
-		FROM system_configs
-		WHERE 1=1
-	`
-
+	whereClause := "WHERE 1=1"
 	args := []interface{}{}
 	argIndex := 1
 
 	if category != nil {
-		query += fmt.Sprintf(" AND category = $%d", argIndex)
+		whereClause += fmt.Sprintf(" AND category = $%d", argIndex)
 		args = append(args, *category)
 		argIndex++
 	}
 
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND key < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND key > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM system_configs %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
 	}
 
-	query += fmt.Sprintf(" ORDER BY key %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
+	// Get paginated results
+	query := fmt.Sprintf(`
+		SELECT
+			id, key, value, description, category, is_sensitive,
+			created_by, updated_by, created_at, updated_at
+		FROM system_configs
+		%s ORDER BY key %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
 	rows, err := r.GetDB().QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 	defer rows.Close()
 
@@ -248,7 +245,7 @@ func (r *SystemConfigRepository) List(ctx context.Context, category *domain.Syst
 		)
 
 		if err != nil {
-			return nil, repository.ParseError(err)
+			return nil, 0, repository.ParseError(err)
 		}
 
 		config.Description = repository.FromNullString(description)
@@ -259,10 +256,10 @@ func (r *SystemConfigRepository) List(ctx context.Context, category *domain.Syst
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 
-	return configs, nil
+	return configs, total, nil
 }
 
 // ListByCategory retrieves all system configs for a specific category

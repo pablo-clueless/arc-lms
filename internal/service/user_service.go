@@ -265,17 +265,13 @@ func (s *UserService) ListUsers(
 		status = filters.Status
 	}
 
-	users, err := s.userRepo.List(ctx, &tenantID, role, status, params)
+	users, total, err := s.userRepo.List(ctx, &tenantID, role, status, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list users: %w", err)
 	}
 
 	// Build pagination result
-	ids := make([]uuid.UUID, len(users))
-	for i, user := range users {
-		ids[i] = user.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	// Remove sensitive fields from all users
 	for _, user := range users {
@@ -599,17 +595,13 @@ func (s *UserService) ListSuperAdmins(
 	}
 
 	role := domain.RoleSuperAdmin
-	users, err := s.userRepo.List(ctx, nil, &role, nil, params)
+	users, total, err := s.userRepo.List(ctx, nil, &role, nil, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list SuperAdmins: %w", err)
 	}
 
 	// Build pagination result
-	ids := make([]uuid.UUID, len(users))
-	for i, user := range users {
-		ids[i] = user.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	// Remove sensitive fields
 	for _, user := range users {
@@ -720,7 +712,7 @@ func (s *UserService) DeleteSuperAdmin(
 
 	// Check that there will be at least one SUPER_ADMIN left
 	role := domain.RoleSuperAdmin
-	superAdmins, err := s.userRepo.List(ctx, nil, &role, nil, repository.PaginationParams{Limit: 10})
+	superAdmins, _, err := s.userRepo.List(ctx, nil, &role, nil, repository.PaginationParams{Page: 1, Limit: 10})
 	if err != nil {
 		return fmt.Errorf("failed to count SuperAdmins: %w", err)
 	}

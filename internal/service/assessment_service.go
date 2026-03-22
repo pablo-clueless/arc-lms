@@ -177,7 +177,12 @@ func (s *AssessmentService) DeleteQuiz(ctx context.Context, id uuid.UUID) error 
 
 // ListQuizzesByCourse lists quizzes for a course
 func (s *AssessmentService) ListQuizzesByCourse(ctx context.Context, courseID uuid.UUID, status *domain.AssessmentStatus, params repository.PaginationParams) ([]*domain.Quiz, *repository.PaginatedResult, error) {
-	return s.quizRepo.ListByCourse(ctx, courseID, status, params)
+	quizzes, total, err := s.quizRepo.ListByCourse(ctx, courseID, status, params)
+	if err != nil {
+		return nil, nil, err
+	}
+	pagination := repository.BuildPaginatedResult(total, params)
+	return quizzes, &pagination, nil
 }
 
 // SubmitQuizRequest represents a quiz submission
@@ -392,7 +397,12 @@ func (s *AssessmentService) GetQuizSubmission(ctx context.Context, id uuid.UUID)
 
 // ListQuizSubmissions lists submissions for a quiz
 func (s *AssessmentService) ListQuizSubmissions(ctx context.Context, quizID uuid.UUID, params repository.PaginationParams) ([]*domain.QuizSubmission, *repository.PaginatedResult, error) {
-	return s.quizRepo.ListSubmissionsByQuiz(ctx, quizID, params)
+	submissions, total, err := s.quizRepo.ListSubmissionsByQuiz(ctx, quizID, params)
+	if err != nil {
+		return nil, nil, err
+	}
+	pagination := repository.BuildPaginatedResult(total, params)
+	return submissions, &pagination, nil
 }
 
 // === Assignment Methods ===
@@ -534,7 +544,12 @@ func (s *AssessmentService) DeleteAssignment(ctx context.Context, id uuid.UUID) 
 
 // ListAssignmentsByCourse lists assignments for a course
 func (s *AssessmentService) ListAssignmentsByCourse(ctx context.Context, courseID uuid.UUID, status *domain.AssessmentStatus, params repository.PaginationParams) ([]*domain.Assignment, *repository.PaginatedResult, error) {
-	return s.assignmentRepo.ListByCourse(ctx, courseID, status, params)
+	assignments, total, err := s.assignmentRepo.ListByCourse(ctx, courseID, status, params)
+	if err != nil {
+		return nil, nil, err
+	}
+	pagination := repository.BuildPaginatedResult(total, params)
+	return assignments, &pagination, nil
 }
 
 // SubmitAssignmentRequest represents an assignment submission
@@ -628,5 +643,10 @@ func (s *AssessmentService) GetAssignmentSubmission(ctx context.Context, id uuid
 
 // ListAssignmentSubmissions lists submissions for an assignment
 func (s *AssessmentService) ListAssignmentSubmissions(ctx context.Context, assignmentID uuid.UUID, params repository.PaginationParams) ([]*domain.AssignmentSubmission, *repository.PaginatedResult, error) {
-	return s.assignmentRepo.ListSubmissionsByAssignment(ctx, assignmentID, params)
+	submissions, total, err := s.assignmentRepo.ListSubmissionsByAssignment(ctx, assignmentID, params)
+	if err != nil {
+		return nil, nil, err
+	}
+	pagination := repository.BuildPaginatedResult(total, params)
+	return submissions, &pagination, nil
 }

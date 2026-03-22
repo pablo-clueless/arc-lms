@@ -169,38 +169,32 @@ func (r *ClassRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // ListBySession retrieves classes for a session with pagination
-func (r *ClassRepository) ListBySession(ctx context.Context, sessionID uuid.UUID, params repository.PaginationParams) ([]*domain.Class, error) {
+func (r *ClassRepository) ListBySession(ctx context.Context, sessionID uuid.UUID, params repository.PaginationParams) ([]*domain.Class, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM classes WHERE session_id = $1"
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, sessionID).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, session_id, name, arm, level,
 			capacity, status, description, created_at, updated_at
 		FROM classes
 		WHERE session_id = $1
-	`
+		ORDER BY id %s
+		LIMIT $2 OFFSET $3
+	`, params.SortOrder)
 
-	args := []interface{}{sessionID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
-	}
-
-	query += fmt.Sprintf(" ORDER BY id %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	rows, err := r.GetDB().QueryContext(ctx, query, args...)
+	rows, err := r.GetDB().QueryContext(ctx, query, sessionID, params.Limit, params.Offset())
 	if err != nil {
-		return nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 	defer rows.Close()
 
@@ -225,7 +219,7 @@ func (r *ClassRepository) ListBySession(ctx context.Context, sessionID uuid.UUID
 		)
 
 		if err != nil {
-			return nil, repository.ParseError(err)
+			return nil, 0, repository.ParseError(err)
 		}
 
 		if capacity.Valid {
@@ -238,45 +232,39 @@ func (r *ClassRepository) ListBySession(ctx context.Context, sessionID uuid.UUID
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 
-	return classes, nil
+	return classes, total, nil
 }
 
 // ListByTenant retrieves classes for a tenant with pagination
-func (r *ClassRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, params repository.PaginationParams) ([]*domain.Class, error) {
+func (r *ClassRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, params repository.PaginationParams) ([]*domain.Class, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM classes WHERE tenant_id = $1"
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, tenantID).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, session_id, name, arm, level,
 			capacity, status, description, created_at, updated_at
 		FROM classes
 		WHERE tenant_id = $1
-	`
+		ORDER BY id %s
+		LIMIT $2 OFFSET $3
+	`, params.SortOrder)
 
-	args := []interface{}{tenantID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
-	}
-
-	query += fmt.Sprintf(" ORDER BY id %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	rows, err := r.GetDB().QueryContext(ctx, query, args...)
+	rows, err := r.GetDB().QueryContext(ctx, query, tenantID, params.Limit, params.Offset())
 	if err != nil {
-		return nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 	defer rows.Close()
 
@@ -301,7 +289,7 @@ func (r *ClassRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, 
 		)
 
 		if err != nil {
-			return nil, repository.ParseError(err)
+			return nil, 0, repository.ParseError(err)
 		}
 
 		if capacity.Valid {
@@ -314,10 +302,10 @@ func (r *ClassRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, 
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 
-	return classes, nil
+	return classes, total, nil
 }
 
 // ValidateTenantAccess validates that a class belongs to a tenant

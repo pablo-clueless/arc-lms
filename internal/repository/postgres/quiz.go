@@ -147,42 +147,43 @@ func (r *QuizRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // ListByCourse retrieves quizzes for a course
-func (r *QuizRepository) ListByCourse(ctx context.Context, courseID uuid.UUID, status *domain.AssessmentStatus, params repository.PaginationParams) ([]*domain.Quiz, *repository.PaginatedResult, error) {
+func (r *QuizRepository) ListByCourse(ctx context.Context, courseID uuid.UUID, status *domain.AssessmentStatus, params repository.PaginationParams) ([]*domain.Quiz, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	whereClause := "WHERE course_id = $1"
+	args := []interface{}{courseID}
+	argIndex := 2
+
+	if status != nil {
+		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
+		args = append(args, *status)
+		argIndex++
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM quizzes %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, course_id, created_by_tutor_id, title, instructions,
 			questions, total_marks, time_limit, availability_start, availability_end,
 			status, show_before_window, allow_retake, passing_percentage,
 			created_at, updated_at, published_at
 		FROM quizzes
-		WHERE course_id = $1
-	`
-
-	args := []interface{}{courseID}
-	argIndex := 2
-
-	if status != nil {
-		query += fmt.Sprintf(" AND status = $%d", argIndex)
-		args = append(args, *status)
-		argIndex++
-	}
-
-	if params.Cursor != nil {
-		query += fmt.Sprintf(" AND id < $%d", argIndex)
-		args = append(args, *params.Cursor)
-		argIndex++
-	}
-
-	query += fmt.Sprintf(" ORDER BY created_at DESC, id DESC LIMIT $%d", argIndex)
-	args = append(args, params.Limit+1)
+		%s ORDER BY created_at %s, id %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
 	rows, err := r.GetDB().QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 	defer rows.Close()
 
@@ -190,29 +191,16 @@ func (r *QuizRepository) ListByCourse(ctx context.Context, courseID uuid.UUID, s
 	for rows.Next() {
 		quiz, err := r.scanQuizFromRows(rows)
 		if err != nil {
-			return nil, nil, err
+			return nil, 0, err
 		}
 		quizzes = append(quizzes, quiz)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 
-	hasMore := len(quizzes) > params.Limit
-	var nextCursor *uuid.UUID
-	if hasMore {
-		quizzes = quizzes[:params.Limit]
-		nextCursor = &quizzes[len(quizzes)-1].ID
-	}
-
-	pagination := &repository.PaginatedResult{
-		HasMore:    hasMore,
-		NextCursor: nextCursor,
-		Count:      len(quizzes),
-	}
-
-	return quizzes, pagination, nil
+	return quizzes, total, nil
 }
 
 // CreateSubmission creates a quiz submission
@@ -327,35 +315,36 @@ func (r *QuizRepository) UpdateSubmission(ctx context.Context, submission *domai
 }
 
 // ListSubmissionsByQuiz retrieves all submissions for a quiz
-func (r *QuizRepository) ListSubmissionsByQuiz(ctx context.Context, quizID uuid.UUID, params repository.PaginationParams) ([]*domain.QuizSubmission, *repository.PaginatedResult, error) {
+func (r *QuizRepository) ListSubmissionsByQuiz(ctx context.Context, quizID uuid.UUID, params repository.PaginationParams) ([]*domain.QuizSubmission, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	whereClause := "WHERE quiz_id = $1"
+	args := []interface{}{quizID}
+	argIndex := 2
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM quiz_submissions %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, quiz_id, student_id, status, started_at, submitted_at,
 			answers, score, percentage, is_auto_graded, feedback, ip_address,
 			created_at, updated_at, graded_at, graded_by
 		FROM quiz_submissions
-		WHERE quiz_id = $1
-	`
-
-	args := []interface{}{quizID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		query += fmt.Sprintf(" AND id < $%d", argIndex)
-		args = append(args, *params.Cursor)
-		argIndex++
-	}
-
-	query += fmt.Sprintf(" ORDER BY submitted_at DESC NULLS LAST, id DESC LIMIT $%d", argIndex)
-	args = append(args, params.Limit+1)
+		%s ORDER BY submitted_at %s NULLS LAST, id %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
 	rows, err := r.GetDB().QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 	defer rows.Close()
 
@@ -363,29 +352,16 @@ func (r *QuizRepository) ListSubmissionsByQuiz(ctx context.Context, quizID uuid.
 	for rows.Next() {
 		submission, err := r.scanSubmissionFromRows(rows)
 		if err != nil {
-			return nil, nil, err
+			return nil, 0, err
 		}
 		submissions = append(submissions, submission)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 
-	hasMore := len(submissions) > params.Limit
-	var nextCursor *uuid.UUID
-	if hasMore {
-		submissions = submissions[:params.Limit]
-		nextCursor = &submissions[len(submissions)-1].ID
-	}
-
-	pagination := &repository.PaginatedResult{
-		HasMore:    hasMore,
-		NextCursor: nextCursor,
-		Count:      len(submissions),
-	}
-
-	return submissions, pagination, nil
+	return submissions, total, nil
 }
 
 func (r *QuizRepository) scanQuiz(row *sql.Row) (*domain.Quiz, error) {

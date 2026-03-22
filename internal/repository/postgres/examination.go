@@ -230,12 +230,20 @@ func (r *ExaminationRepository) Delete(ctx context.Context, id uuid.UUID) error 
 }
 
 // ListByCourse retrieves examinations for a course
-func (r *ExaminationRepository) ListByCourse(ctx context.Context, courseID uuid.UUID, params repository.PaginationParams) ([]*domain.Examination, error) {
+func (r *ExaminationRepository) ListByCourse(ctx context.Context, courseID uuid.UUID, params repository.PaginationParams) ([]*domain.Examination, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM examinations WHERE course_id = $1"
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, courseID).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, course_id, term_id, created_by_id,
 			title, instructions, questions, total_marks, duration,
@@ -244,34 +252,33 @@ func (r *ExaminationRepository) ListByCourse(ctx context.Context, courseID uuid.
 			created_at, updated_at, scheduled_at
 		FROM examinations
 		WHERE course_id = $1
-	`
+		ORDER BY created_at %s
+		LIMIT $2 OFFSET $3
+	`, params.SortOrder)
 
-	args := []interface{}{courseID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	exams, err := r.queryExaminations(ctx, query, courseID, params.Limit, params.Offset())
+	if err != nil {
+		return nil, 0, err
 	}
 
-	query += fmt.Sprintf(" ORDER BY created_at %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryExaminations(ctx, query, args...)
+	return exams, total, nil
 }
 
 // ListByTerm retrieves examinations for a term
-func (r *ExaminationRepository) ListByTerm(ctx context.Context, termID uuid.UUID, params repository.PaginationParams) ([]*domain.Examination, error) {
+func (r *ExaminationRepository) ListByTerm(ctx context.Context, termID uuid.UUID, params repository.PaginationParams) ([]*domain.Examination, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM examinations WHERE term_id = $1"
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, termID).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, course_id, term_id, created_by_id,
 			title, instructions, questions, total_marks, duration,
@@ -280,34 +287,44 @@ func (r *ExaminationRepository) ListByTerm(ctx context.Context, termID uuid.UUID
 			created_at, updated_at, scheduled_at
 		FROM examinations
 		WHERE term_id = $1
-	`
+		ORDER BY window_start %s
+		LIMIT $2 OFFSET $3
+	`, params.SortOrder)
 
-	args := []interface{}{termID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	exams, err := r.queryExaminations(ctx, query, termID, params.Limit, params.Offset())
+	if err != nil {
+		return nil, 0, err
 	}
 
-	query += fmt.Sprintf(" ORDER BY window_start %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryExaminations(ctx, query, args...)
+	return exams, total, nil
 }
 
 // ListByTenant retrieves examinations for a tenant
-func (r *ExaminationRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, status *domain.ExaminationStatus, params repository.PaginationParams) ([]*domain.Examination, error) {
+func (r *ExaminationRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, status *domain.ExaminationStatus, params repository.PaginationParams) ([]*domain.Examination, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Build WHERE clause
+	whereClause := "WHERE tenant_id = $1"
+	args := []interface{}{tenantID}
+	argIndex := 2
+
+	if status != nil {
+		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
+		args = append(args, *status)
+		argIndex++
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM examinations %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, course_id, term_id, created_by_id,
 			title, instructions, questions, total_marks, duration,
@@ -315,32 +332,19 @@ func (r *ExaminationRepository) ListByTenant(ctx context.Context, tenantID uuid.
 			results_published_at, results_published_by,
 			created_at, updated_at, scheduled_at
 		FROM examinations
-		WHERE tenant_id = $1
-	`
+		%s
+		ORDER BY created_at %s
+		LIMIT $%d OFFSET $%d
+	`, whereClause, params.SortOrder, argIndex, argIndex+1)
 
-	args := []interface{}{tenantID}
-	argIndex := 2
+	args = append(args, params.Limit, params.Offset())
 
-	if status != nil {
-		query += fmt.Sprintf(" AND status = $%d", argIndex)
-		args = append(args, *status)
-		argIndex++
+	exams, err := r.queryExaminations(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
-	}
-
-	query += fmt.Sprintf(" ORDER BY created_at %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.queryExaminations(ctx, query, args...)
+	return exams, total, nil
 }
 
 // GetActiveExaminations retrieves examinations that are currently in their window
@@ -689,12 +693,20 @@ func (r *ExaminationRepository) UpdateSubmission(ctx context.Context, sub *domai
 }
 
 // ListSubmissionsByExam retrieves all submissions for an examination
-func (r *ExaminationRepository) ListSubmissionsByExam(ctx context.Context, examID uuid.UUID, params repository.PaginationParams) ([]*domain.ExaminationSubmission, error) {
+func (r *ExaminationRepository) ListSubmissionsByExam(ctx context.Context, examID uuid.UUID, params repository.PaginationParams) ([]*domain.ExaminationSubmission, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM examination_submissions WHERE examination_id = $1"
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, examID).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, examination_id, student_id, status,
 			started_at, submitted_at, auto_submitted, answers,
@@ -703,34 +715,33 @@ func (r *ExaminationRepository) ListSubmissionsByExam(ctx context.Context, examI
 			graded_at, graded_by, results_published_to_student
 		FROM examination_submissions
 		WHERE examination_id = $1
-	`
+		ORDER BY submitted_at %s NULLS LAST
+		LIMIT $2 OFFSET $3
+	`, params.SortOrder)
 
-	args := []interface{}{examID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	submissions, err := r.querySubmissions(ctx, query, examID, params.Limit, params.Offset())
+	if err != nil {
+		return nil, 0, err
 	}
 
-	query += fmt.Sprintf(" ORDER BY submitted_at %s NULLS LAST LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.querySubmissions(ctx, query, args...)
+	return submissions, total, nil
 }
 
 // ListSubmissionsByStudent retrieves all submissions for a student
-func (r *ExaminationRepository) ListSubmissionsByStudent(ctx context.Context, studentID uuid.UUID, params repository.PaginationParams) ([]*domain.ExaminationSubmission, error) {
+func (r *ExaminationRepository) ListSubmissionsByStudent(ctx context.Context, studentID uuid.UUID, params repository.PaginationParams) ([]*domain.ExaminationSubmission, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM examination_submissions WHERE student_id = $1"
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, studentID).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, examination_id, student_id, status,
 			started_at, submitted_at, auto_submitted, answers,
@@ -739,25 +750,16 @@ func (r *ExaminationRepository) ListSubmissionsByStudent(ctx context.Context, st
 			graded_at, graded_by, results_published_to_student
 		FROM examination_submissions
 		WHERE student_id = $1
-	`
+		ORDER BY created_at %s
+		LIMIT $2 OFFSET $3
+	`, params.SortOrder)
 
-	args := []interface{}{studentID}
-	argIndex := 2
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	submissions, err := r.querySubmissions(ctx, query, studentID, params.Limit, params.Offset())
+	if err != nil {
+		return nil, 0, err
 	}
 
-	query += fmt.Sprintf(" ORDER BY created_at %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.querySubmissions(ctx, query, args...)
+	return submissions, total, nil
 }
 
 // GetPendingGradingSubmissions retrieves submissions that need manual grading

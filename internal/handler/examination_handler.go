@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"arc-lms/internal/domain"
 	"arc-lms/internal/pkg/errors"
@@ -33,7 +34,7 @@ func NewExaminationHandler(examinationService *service.ExaminationService) *Exam
 // @Param course_id query string false "Filter by course ID"
 // @Param term_id query string false "Filter by term ID"
 // @Param status query string false "Filter by status (DRAFT, SCHEDULED, IN_PROGRESS, COMPLETED)"
-// @Param cursor query string false "Pagination cursor"
+// @Param page query int false "Page number"
 // @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
 // @Router /examinations [get]
@@ -69,10 +70,16 @@ func (h *ExaminationHandler) ListExaminations(c *gin.Context) {
 		status = &s
 	}
 
-	params := repository.PaginationParams{Limit: 50, SortOrder: "DESC"}
-	if cursorStr := c.Query("cursor"); cursorStr != "" {
-		cursor, _ := uuid.Parse(cursorStr)
-		params.Cursor = &cursor
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
 	}
 
 	examinations, pagination, err := h.examinationService.ListExaminations(c.Request.Context(), tenantID, courseID, termID, status, params)
@@ -523,7 +530,7 @@ func (h *ExaminationHandler) GetMySubmission(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Param id path string true "Examination ID"
-// @Param cursor query string false "Pagination cursor"
+// @Param page query int false "Page number"
 // @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
 // @Router /examinations/{id}/submissions [get]
@@ -534,10 +541,16 @@ func (h *ExaminationHandler) ListSubmissions(c *gin.Context) {
 		return
 	}
 
-	params := repository.PaginationParams{Limit: 50, SortOrder: "DESC"}
-	if cursorStr := c.Query("cursor"); cursorStr != "" {
-		cursor, _ := uuid.Parse(cursorStr)
-		params.Cursor = &cursor
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
 	}
 
 	submissions, pagination, err := h.examinationService.ListSubmissions(c.Request.Context(), examID, params)

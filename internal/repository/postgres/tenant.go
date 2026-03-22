@@ -201,45 +201,42 @@ func (r *TenantRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // List retrieves tenants with optional status filter and pagination
-func (r *TenantRepository) List(ctx context.Context, status *domain.TenantStatus, params repository.PaginationParams) ([]*domain.Tenant, error) {
+func (r *TenantRepository) List(ctx context.Context, status *domain.TenantStatus, params repository.PaginationParams) ([]*domain.Tenant, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	whereClause := "WHERE 1=1"
+	args := []interface{}{}
+	argIndex := 1
+
+	if status != nil {
+		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
+		args = append(args, *status)
+		argIndex++
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM tenants %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, name, school_type, contact_email, address, logo,
 			status, configuration, billing_contact, suspension_reason,
 			principal_admin_id, created_at, updated_at, suspended_at
 		FROM tenants
-		WHERE 1=1
-	`
-
-	args := []interface{}{}
-	argIndex := 1
-
-	if status != nil {
-		query += fmt.Sprintf(" AND status = $%d", argIndex)
-		args = append(args, *status)
-		argIndex++
-	}
-
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
-	}
-
-	query += fmt.Sprintf(" ORDER BY id %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1) // Fetch one extra to check if there's more
+		%s ORDER BY id %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
 	rows, err := r.GetDB().QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 	defer rows.Close()
 
@@ -268,7 +265,7 @@ func (r *TenantRepository) List(ctx context.Context, status *domain.TenantStatus
 		)
 
 		if err != nil {
-			return nil, repository.ParseError(err)
+			return nil, 0, repository.ParseError(err)
 		}
 
 		if logo.Valid {
@@ -282,21 +279,21 @@ func (r *TenantRepository) List(ctx context.Context, status *domain.TenantStatus
 		}
 
 		if err := json.Unmarshal(configJSON, &tenant.Configuration); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal configuration: %w", err)
+			return nil, 0, fmt.Errorf("failed to unmarshal configuration: %w", err)
 		}
 
 		if err := json.Unmarshal(billingJSON, &tenant.BillingContact); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal billing contact: %w", err)
+			return nil, 0, fmt.Errorf("failed to unmarshal billing contact: %w", err)
 		}
 
 		tenants = append(tenants, &tenant)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 
-	return tenants, nil
+	return tenants, total, nil
 }
 
 // Suspend suspends a tenant with a reason

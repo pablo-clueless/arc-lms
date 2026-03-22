@@ -126,7 +126,7 @@ func (s *DashboardService) getSuperAdminDashboard(ctx context.Context) (*SuperAd
 		Limit:     1000, // High limit for dashboard
 		SortOrder: "DESC",
 	}
-	allTenants, err := s.tenantRepo.List(ctx, nil, paginationParams)
+	allTenants, _, err := s.tenantRepo.List(ctx, nil, paginationParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tenants: %w", err)
 	}
@@ -143,7 +143,7 @@ func (s *DashboardService) getSuperAdminDashboard(ctx context.Context) (*SuperAd
 	}
 
 	// Get all users (across all tenants)
-	allUsers, err := s.userRepo.List(ctx, nil, nil, nil, paginationParams)
+	allUsers, _, err := s.userRepo.List(ctx, nil, nil, nil, paginationParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list users: %w", err)
 	}
@@ -211,7 +211,7 @@ func (s *DashboardService) getAdminDashboard(ctx context.Context, tenantID uuid.
 		Limit:     1000, // High limit for dashboard
 		SortOrder: "DESC",
 	}
-	users, err := s.userRepo.List(ctx, &tenantID, nil, nil, paginationParams)
+	users, _, err := s.userRepo.List(ctx, &tenantID, nil, nil, paginationParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list users: %w", err)
 	}
@@ -227,13 +227,13 @@ func (s *DashboardService) getAdminDashboard(ctx context.Context, tenantID uuid.
 	}
 
 	// Get classes
-	classes, err := s.classRepo.ListByTenant(ctx, tenantID, paginationParams)
+	classes, _, err := s.classRepo.ListByTenant(ctx, tenantID, paginationParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list classes: %w", err)
 	}
 
 	// Get sessions
-	sessions, err := s.sessionRepo.ListByTenant(ctx, tenantID, nil, paginationParams)
+	sessions, _, err := s.sessionRepo.ListByTenant(ctx, tenantID, nil, paginationParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sessions: %w", err)
 	}
@@ -241,7 +241,7 @@ func (s *DashboardService) getAdminDashboard(ctx context.Context, tenantID uuid.
 	// Get courses (count by iterating through all classes)
 	allCourses := []*domain.Course{}
 	for _, class := range classes {
-		classCourses, err := s.courseRepo.ListByClass(ctx, class.ID, paginationParams)
+		classCourses, _, err := s.courseRepo.ListByClass(ctx, class.ID, paginationParams)
 		if err != nil {
 			continue
 		}
@@ -260,7 +260,7 @@ func (s *DashboardService) getAdminDashboard(ctx context.Context, tenantID uuid.
 	// Get enrollments (iterate through classes to get all enrollments)
 	allEnrollments := []*domain.Enrollment{}
 	for _, class := range classes {
-		classEnrollments, err := s.enrollmentRepo.ListByClass(ctx, class.ID, paginationParams)
+		classEnrollments, _, err := s.enrollmentRepo.ListByClass(ctx, class.ID, paginationParams)
 		if err != nil {
 			continue
 		}
@@ -295,7 +295,7 @@ func (s *DashboardService) getTutorDashboard(ctx context.Context, tutorID uuid.U
 		Limit:     1000, // High limit for dashboard
 		SortOrder: "DESC",
 	}
-	courses, err := s.courseRepo.ListByTutor(ctx, tutorID, paginationParams)
+	courses, _, err := s.courseRepo.ListByTutor(ctx, tutorID, paginationParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tutor courses: %w", err)
 	}
@@ -303,7 +303,7 @@ func (s *DashboardService) getTutorDashboard(ctx context.Context, tutorID uuid.U
 	// Get unique students from enrollments in the tutor's classes
 	studentMap := make(map[uuid.UUID]bool)
 	for _, course := range courses {
-		enrollments, err := s.enrollmentRepo.ListByClass(ctx, course.ClassID, paginationParams)
+		enrollments, _, err := s.enrollmentRepo.ListByClass(ctx, course.ClassID, paginationParams)
 		if err != nil {
 			continue
 		}
@@ -315,7 +315,7 @@ func (s *DashboardService) getTutorDashboard(ctx context.Context, tutorID uuid.U
 	}
 
 	// Get active session
-	sessions, err := s.sessionRepo.ListByTenant(ctx, tenantID, nil, paginationParams)
+	sessions, _, err := s.sessionRepo.ListByTenant(ctx, tenantID, nil, paginationParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sessions: %w", err)
 	}
@@ -343,7 +343,7 @@ func (s *DashboardService) getStudentDashboard(ctx context.Context, studentID uu
 		Limit:     1000, // High limit for dashboard
 		SortOrder: "DESC",
 	}
-	enrollments, err := s.enrollmentRepo.ListByStudent(ctx, studentID, paginationParams)
+	enrollments, _, err := s.enrollmentRepo.ListByStudent(ctx, studentID, paginationParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list enrollments: %w", err)
 	}
@@ -358,7 +358,7 @@ func (s *DashboardService) getStudentDashboard(ctx context.Context, studentID uu
 	}
 
 	for classID := range classIDs {
-		classCourses, err := s.courseRepo.ListByClass(ctx, classID, paginationParams)
+		classCourses, _, err := s.courseRepo.ListByClass(ctx, classID, paginationParams)
 		if err != nil {
 			continue
 		}
@@ -366,7 +366,7 @@ func (s *DashboardService) getStudentDashboard(ctx context.Context, studentID uu
 	}
 
 	// Get active session
-	sessions, err := s.sessionRepo.ListByTenant(ctx, tenantID, nil, paginationParams)
+	sessions, _, err := s.sessionRepo.ListByTenant(ctx, tenantID, nil, paginationParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sessions: %w", err)
 	}

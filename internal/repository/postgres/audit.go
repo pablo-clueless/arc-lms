@@ -100,98 +100,99 @@ func (r *AuditRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Au
 }
 
 // List retrieves audit logs with filters and pagination
-func (r *AuditRepository) List(ctx context.Context, filters interface{}, params repository.PaginationParams) ([]*domain.AuditLog, *repository.PaginatedResult, error) {
+func (r *AuditRepository) List(ctx context.Context, filters interface{}, params repository.PaginationParams) ([]*domain.AuditLog, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, nil, err
+		return nil, 0, err
 	}
 
 	// Type assert filters
 	auditFilters, _ := filters.(*domain.AuditFilters)
 
-	query := `
+	whereClause := "WHERE 1=1"
+	args := []interface{}{}
+	argIndex := 1
+
+	if auditFilters != nil {
+		if auditFilters.TenantID != nil {
+			whereClause += fmt.Sprintf(" AND tenant_id = $%d", argIndex)
+			args = append(args, *auditFilters.TenantID)
+			argIndex++
+		}
+
+		if auditFilters.ActorUserID != nil {
+			whereClause += fmt.Sprintf(" AND actor_user_id = $%d", argIndex)
+			args = append(args, *auditFilters.ActorUserID)
+			argIndex++
+		}
+
+		if auditFilters.ActorRole != nil {
+			whereClause += fmt.Sprintf(" AND actor_role = $%d", argIndex)
+			args = append(args, *auditFilters.ActorRole)
+			argIndex++
+		}
+
+		if auditFilters.Action != nil {
+			whereClause += fmt.Sprintf(" AND action = $%d", argIndex)
+			args = append(args, *auditFilters.Action)
+			argIndex++
+		}
+
+		if auditFilters.ResourceType != nil {
+			whereClause += fmt.Sprintf(" AND resource_type = $%d", argIndex)
+			args = append(args, *auditFilters.ResourceType)
+			argIndex++
+		}
+
+		if auditFilters.ResourceID != nil {
+			whereClause += fmt.Sprintf(" AND resource_id = $%d", argIndex)
+			args = append(args, *auditFilters.ResourceID)
+			argIndex++
+		}
+
+		if auditFilters.IsSensitive != nil {
+			whereClause += fmt.Sprintf(" AND is_sensitive = $%d", argIndex)
+			args = append(args, *auditFilters.IsSensitive)
+			argIndex++
+		}
+
+		if auditFilters.StartDate != nil {
+			whereClause += fmt.Sprintf(" AND timestamp >= $%d", argIndex)
+			args = append(args, *auditFilters.StartDate)
+			argIndex++
+		}
+
+		if auditFilters.EndDate != nil {
+			whereClause += fmt.Sprintf(" AND timestamp <= $%d", argIndex)
+			args = append(args, *auditFilters.EndDate)
+			argIndex++
+		}
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM audit_logs %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, actor_user_id, actor_role, action,
 			resource_type, resource_id, resource_name, before_state,
 			after_state, changes, ip_address, user_agent, metadata,
 			is_sensitive, timestamp, created_at
 		FROM audit_logs
-		WHERE 1=1
-	`
+		%s
+		ORDER BY timestamp %s, id DESC
+		LIMIT $%d OFFSET $%d
+	`, whereClause, params.SortOrder, argIndex, argIndex+1)
 
-	args := []interface{}{}
-	argIndex := 1
-
-	if auditFilters != nil {
-		if auditFilters.TenantID != nil {
-			query += fmt.Sprintf(" AND tenant_id = $%d", argIndex)
-			args = append(args, *auditFilters.TenantID)
-			argIndex++
-		}
-
-		if auditFilters.ActorUserID != nil {
-			query += fmt.Sprintf(" AND actor_user_id = $%d", argIndex)
-			args = append(args, *auditFilters.ActorUserID)
-			argIndex++
-		}
-
-		if auditFilters.ActorRole != nil {
-			query += fmt.Sprintf(" AND actor_role = $%d", argIndex)
-			args = append(args, *auditFilters.ActorRole)
-			argIndex++
-		}
-
-		if auditFilters.Action != nil {
-			query += fmt.Sprintf(" AND action = $%d", argIndex)
-			args = append(args, *auditFilters.Action)
-			argIndex++
-		}
-
-		if auditFilters.ResourceType != nil {
-			query += fmt.Sprintf(" AND resource_type = $%d", argIndex)
-			args = append(args, *auditFilters.ResourceType)
-			argIndex++
-		}
-
-		if auditFilters.ResourceID != nil {
-			query += fmt.Sprintf(" AND resource_id = $%d", argIndex)
-			args = append(args, *auditFilters.ResourceID)
-			argIndex++
-		}
-
-		if auditFilters.IsSensitive != nil {
-			query += fmt.Sprintf(" AND is_sensitive = $%d", argIndex)
-			args = append(args, *auditFilters.IsSensitive)
-			argIndex++
-		}
-
-		if auditFilters.StartDate != nil {
-			query += fmt.Sprintf(" AND timestamp >= $%d", argIndex)
-			args = append(args, *auditFilters.StartDate)
-			argIndex++
-		}
-
-		if auditFilters.EndDate != nil {
-			query += fmt.Sprintf(" AND timestamp <= $%d", argIndex)
-			args = append(args, *auditFilters.EndDate)
-			argIndex++
-		}
-	}
-
-	// Cursor-based pagination using timestamp
-	if params.Cursor != nil {
-		// For audit logs, we use timestamp-based pagination
-		// The cursor is stored as a UUID but we need to get the timestamp from it
-		query += fmt.Sprintf(" AND id < $%d", argIndex)
-		args = append(args, *params.Cursor)
-		argIndex++
-	}
-
-	query += fmt.Sprintf(" ORDER BY timestamp DESC, id DESC LIMIT $%d", argIndex)
-	args = append(args, params.Limit+1)
+	args = append(args, params.Limit, params.Offset())
 
 	rows, err := r.GetDB().QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 	defer rows.Close()
 
@@ -199,39 +200,33 @@ func (r *AuditRepository) List(ctx context.Context, filters interface{}, params 
 	for rows.Next() {
 		log, err := r.scanAuditLogFromRows(rows)
 		if err != nil {
-			return nil, nil, err
+			return nil, 0, err
 		}
 		logs = append(logs, log)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 
-	// Build pagination result
-	hasMore := len(logs) > params.Limit
-	var nextCursor *uuid.UUID
-	if hasMore {
-		logs = logs[:params.Limit]
-		nextCursor = &logs[len(logs)-1].ID
-	}
-
-	pagination := &repository.PaginatedResult{
-		HasMore:    hasMore,
-		NextCursor: nextCursor,
-		Count:      len(logs),
-	}
-
-	return logs, pagination, nil
+	return logs, total, nil
 }
 
 // GetByResource retrieves audit logs for a specific resource
-func (r *AuditRepository) GetByResource(ctx context.Context, resourceType domain.AuditResourceType, resourceID uuid.UUID, params repository.PaginationParams) ([]*domain.AuditLog, *repository.PaginatedResult, error) {
+func (r *AuditRepository) GetByResource(ctx context.Context, resourceType domain.AuditResourceType, resourceID uuid.UUID, params repository.PaginationParams) ([]*domain.AuditLog, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, nil, err
+		return nil, 0, err
 	}
 
-	query := `
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM audit_logs WHERE resource_type = $1 AND resource_id = $2"
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, resourceType, resourceID).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, actor_user_id, actor_role, action,
 			resource_type, resource_id, resource_name, before_state,
@@ -239,23 +234,13 @@ func (r *AuditRepository) GetByResource(ctx context.Context, resourceType domain
 			is_sensitive, timestamp, created_at
 		FROM audit_logs
 		WHERE resource_type = $1 AND resource_id = $2
-	`
+		ORDER BY timestamp %s, id DESC
+		LIMIT $3 OFFSET $4
+	`, params.SortOrder)
 
-	args := []interface{}{resourceType, resourceID}
-	argIndex := 3
-
-	if params.Cursor != nil {
-		query += fmt.Sprintf(" AND id < $%d", argIndex)
-		args = append(args, *params.Cursor)
-		argIndex++
-	}
-
-	query += fmt.Sprintf(" ORDER BY timestamp DESC, id DESC LIMIT $%d", argIndex)
-	args = append(args, params.Limit+1)
-
-	rows, err := r.GetDB().QueryContext(ctx, query, args...)
+	rows, err := r.GetDB().QueryContext(ctx, query, resourceType, resourceID, params.Limit, params.Offset())
 	if err != nil {
-		return nil, nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 	defer rows.Close()
 
@@ -263,30 +248,16 @@ func (r *AuditRepository) GetByResource(ctx context.Context, resourceType domain
 	for rows.Next() {
 		log, err := r.scanAuditLogFromRows(rows)
 		if err != nil {
-			return nil, nil, err
+			return nil, 0, err
 		}
 		logs = append(logs, log)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, nil, repository.ParseError(err)
+		return nil, 0, repository.ParseError(err)
 	}
 
-	// Build pagination result
-	hasMore := len(logs) > params.Limit
-	var nextCursor *uuid.UUID
-	if hasMore {
-		logs = logs[:params.Limit]
-		nextCursor = &logs[len(logs)-1].ID
-	}
-
-	pagination := &repository.PaginatedResult{
-		HasMore:    hasMore,
-		NextCursor: nextCursor,
-		Count:      len(logs),
-	}
-
-	return logs, pagination, nil
+	return logs, total, nil
 }
 
 // scanAuditLog scans an audit log from a single row

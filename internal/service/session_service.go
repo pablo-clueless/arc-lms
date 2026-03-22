@@ -209,17 +209,12 @@ func (s *SessionService) ListSessions(
 		status = filters.Status
 	}
 
-	sessions, err := s.sessionRepo.ListByTenant(ctx, tenantID, status, params)
+	sessions, total, err := s.sessionRepo.ListByTenant(ctx, tenantID, status, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list sessions: %w", err)
 	}
 
-	// Build pagination result
-	ids := make([]uuid.UUID, len(sessions))
-	for i, session := range sessions {
-		ids[i] = session.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return sessions, &pagination, nil
 }

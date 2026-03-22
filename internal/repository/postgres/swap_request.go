@@ -197,155 +197,163 @@ func (r *SwapRequestRepository) Delete(ctx context.Context, id uuid.UUID) error 
 }
 
 // ListByTutor retrieves swap requests involving a tutor (as requester or target)
-func (r *SwapRequestRepository) ListByTutor(ctx context.Context, tutorID uuid.UUID, status *domain.SwapRequestStatus, params repository.PaginationParams) ([]*domain.SwapRequest, error) {
+func (r *SwapRequestRepository) ListByTutor(ctx context.Context, tutorID uuid.UUID, status *domain.SwapRequestStatus, params repository.PaginationParams) ([]*domain.SwapRequest, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
-		SELECT
-			id, tenant_id, requesting_period_id, target_period_id,
-			requesting_tutor_id, target_tutor_id, status, reason,
-			rejection_reason, escalation_reason, admin_override_reason,
-			admin_override_by, created_at, updated_at, responded_at, escalated_at
-		FROM period_swap_requests
-		WHERE (requesting_tutor_id = $1 OR target_tutor_id = $1)
-	`
-
+	whereClause := "WHERE (requesting_tutor_id = $1 OR target_tutor_id = $1)"
 	args := []interface{}{tutorID}
 	argIndex := 2
 
 	if status != nil {
-		query += fmt.Sprintf(" AND status = $%d", argIndex)
+		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
 		args = append(args, *status)
 		argIndex++
 	}
 
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM period_swap_requests %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
 	}
 
-	query += fmt.Sprintf(" ORDER BY created_at %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
+	// Get paginated results
+	query := fmt.Sprintf(`
+		SELECT
+			id, tenant_id, requesting_period_id, target_period_id,
+			requesting_tutor_id, target_tutor_id, status, reason,
+			rejection_reason, escalation_reason, admin_override_reason,
+			admin_override_by, created_at, updated_at, responded_at, escalated_at
+		FROM period_swap_requests
+		%s ORDER BY created_at %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
-	return r.querySwapRequests(ctx, query, args...)
+	requests, err := r.querySwapRequests(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return requests, total, nil
 }
 
 // ListPendingForTutor retrieves pending swap requests where the tutor is the target
-func (r *SwapRequestRepository) ListPendingForTutor(ctx context.Context, tutorID uuid.UUID, params repository.PaginationParams) ([]*domain.SwapRequest, error) {
+func (r *SwapRequestRepository) ListPendingForTutor(ctx context.Context, tutorID uuid.UUID, params repository.PaginationParams) ([]*domain.SwapRequest, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
-		SELECT
-			id, tenant_id, requesting_period_id, target_period_id,
-			requesting_tutor_id, target_tutor_id, status, reason,
-			rejection_reason, escalation_reason, admin_override_reason,
-			admin_override_by, created_at, updated_at, responded_at, escalated_at
-		FROM period_swap_requests
-		WHERE target_tutor_id = $1 AND status = $2
-	`
-
+	whereClause := "WHERE target_tutor_id = $1 AND status = $2"
 	args := []interface{}{tutorID, domain.SwapRequestStatusPending}
 	argIndex := 3
 
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM period_swap_requests %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
 	}
 
-	query += fmt.Sprintf(" ORDER BY created_at %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
+	// Get paginated results
+	query := fmt.Sprintf(`
+		SELECT
+			id, tenant_id, requesting_period_id, target_period_id,
+			requesting_tutor_id, target_tutor_id, status, reason,
+			rejection_reason, escalation_reason, admin_override_reason,
+			admin_override_by, created_at, updated_at, responded_at, escalated_at
+		FROM period_swap_requests
+		%s ORDER BY created_at %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
-	return r.querySwapRequests(ctx, query, args...)
+	requests, err := r.querySwapRequests(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return requests, total, nil
 }
 
 // ListEscalated retrieves escalated swap requests for admin review
-func (r *SwapRequestRepository) ListEscalated(ctx context.Context, tenantID uuid.UUID, params repository.PaginationParams) ([]*domain.SwapRequest, error) {
+func (r *SwapRequestRepository) ListEscalated(ctx context.Context, tenantID uuid.UUID, params repository.PaginationParams) ([]*domain.SwapRequest, int, error) {
 	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	query := `
-		SELECT
-			id, tenant_id, requesting_period_id, target_period_id,
-			requesting_tutor_id, target_tutor_id, status, reason,
-			rejection_reason, escalation_reason, admin_override_reason,
-			admin_override_by, created_at, updated_at, responded_at, escalated_at
-		FROM period_swap_requests
-		WHERE tenant_id = $1 AND status = $2
-	`
-
+	whereClause := "WHERE tenant_id = $1 AND status = $2"
 	args := []interface{}{tenantID, domain.SwapRequestStatusEscalated}
 	argIndex := 3
 
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM period_swap_requests %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
 	}
 
-	query += fmt.Sprintf(" ORDER BY escalated_at %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
-
-	return r.querySwapRequests(ctx, query, args...)
-}
-
-// ListByTenant retrieves all swap requests for a tenant
-func (r *SwapRequestRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, status *domain.SwapRequestStatus, params repository.PaginationParams) ([]*domain.SwapRequest, error) {
-	if err := repository.ValidatePaginationParams(&params); err != nil {
-		return nil, err
-	}
-
-	query := `
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, requesting_period_id, target_period_id,
 			requesting_tutor_id, target_tutor_id, status, reason,
 			rejection_reason, escalation_reason, admin_override_reason,
 			admin_override_by, created_at, updated_at, responded_at, escalated_at
 		FROM period_swap_requests
-		WHERE tenant_id = $1
-	`
+		%s ORDER BY escalated_at %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
+	requests, err := r.querySwapRequests(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return requests, total, nil
+}
+
+// ListByTenant retrieves all swap requests for a tenant
+func (r *SwapRequestRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, status *domain.SwapRequestStatus, params repository.PaginationParams) ([]*domain.SwapRequest, int, error) {
+	if err := repository.ValidatePaginationParams(&params); err != nil {
+		return nil, 0, err
+	}
+
+	whereClause := "WHERE tenant_id = $1"
 	args := []interface{}{tenantID}
 	argIndex := 2
 
 	if status != nil {
-		query += fmt.Sprintf(" AND status = $%d", argIndex)
+		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
 		args = append(args, *status)
 		argIndex++
 	}
 
-	if params.Cursor != nil {
-		if params.SortOrder == "DESC" {
-			query += fmt.Sprintf(" AND id < $%d", argIndex)
-		} else {
-			query += fmt.Sprintf(" AND id > $%d", argIndex)
-		}
-		args = append(args, *params.Cursor)
-		argIndex++
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM period_swap_requests %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
 	}
 
-	query += fmt.Sprintf(" ORDER BY created_at %s LIMIT $%d", params.SortOrder, argIndex)
-	args = append(args, params.Limit+1)
+	// Get paginated results
+	query := fmt.Sprintf(`
+		SELECT
+			id, tenant_id, requesting_period_id, target_period_id,
+			requesting_tutor_id, target_tutor_id, status, reason,
+			rejection_reason, escalation_reason, admin_override_reason,
+			admin_override_by, created_at, updated_at, responded_at, escalated_at
+		FROM period_swap_requests
+		%s ORDER BY created_at %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
 
-	return r.querySwapRequests(ctx, query, args...)
+	requests, err := r.querySwapRequests(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return requests, total, nil
 }
 
 // CancelPendingByTimetable cancels all pending swap requests for periods in a timetable

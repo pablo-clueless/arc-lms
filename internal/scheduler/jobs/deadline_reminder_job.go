@@ -186,7 +186,7 @@ func (j *DeadlineReminderJob) sendAssignmentReminders(ctx context.Context, assig
 	}
 
 	// Get enrolled students
-	enrollments, err := j.enrollmentRepo.ListByClass(ctx, course.ClassID, repository.PaginationParams{Limit: 1000})
+	enrollments, _, err := j.enrollmentRepo.ListByClass(ctx, course.ClassID, repository.PaginationParams{Limit: 1000})
 	if err != nil {
 		return 0, fmt.Errorf("failed to get enrollments: %w", err)
 	}
@@ -247,7 +247,7 @@ func (j *DeadlineReminderJob) sendQuizReminders(ctx context.Context, quiz *domai
 	}
 
 	// Get enrolled students
-	enrollments, err := j.enrollmentRepo.ListByClass(ctx, course.ClassID, repository.PaginationParams{Limit: 1000})
+	enrollments, _, err := j.enrollmentRepo.ListByClass(ctx, course.ClassID, repository.PaginationParams{Limit: 1000})
 	if err != nil {
 		return 0, fmt.Errorf("failed to get enrollments: %w", err)
 	}

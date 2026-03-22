@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"arc-lms/internal/domain"
@@ -32,7 +33,7 @@ func NewProgressHandler(progressService *service.ProgressService) *ProgressHandl
 // @Security BearerAuth
 // @Produce json
 // @Param student_id path string true "Student ID"
-// @Param cursor query string false "Pagination cursor"
+// @Param page query int false "Page number"
 // @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
 // @Router /progress/students/{student_id} [get]
@@ -56,10 +57,16 @@ func (h *ProgressHandler) GetStudentProgress(c *gin.Context) {
 		return
 	}
 
-	params := repository.PaginationParams{Limit: 50, SortOrder: "DESC"}
-	if cursorStr := c.Query("cursor"); cursorStr != "" {
-		cursor, _ := uuid.Parse(cursorStr)
-		params.Cursor = &cursor
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
 	}
 
 	progresses, pagination, err := h.progressService.ListStudentProgress(c.Request.Context(), studentID, params)
@@ -77,7 +84,7 @@ func (h *ProgressHandler) GetStudentProgress(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Param course_id path string true "Course ID"
-// @Param cursor query string false "Pagination cursor"
+// @Param page query int false "Page number"
 // @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
 // @Router /progress/courses/{course_id} [get]
@@ -88,10 +95,16 @@ func (h *ProgressHandler) GetCourseProgress(c *gin.Context) {
 		return
 	}
 
-	params := repository.PaginationParams{Limit: 50, SortOrder: "DESC"}
-	if cursorStr := c.Query("cursor"); cursorStr != "" {
-		cursor, _ := uuid.Parse(cursorStr)
-		params.Cursor = &cursor
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
 	}
 
 	progresses, pagination, err := h.progressService.ListCourseProgress(c.Request.Context(), courseID, params)
@@ -109,7 +122,7 @@ func (h *ProgressHandler) GetCourseProgress(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Param class_id path string true "Class ID"
-// @Param cursor query string false "Pagination cursor"
+// @Param page query int false "Page number"
 // @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
 // @Router /progress/classes/{class_id} [get]
@@ -120,10 +133,16 @@ func (h *ProgressHandler) GetClassProgress(c *gin.Context) {
 		return
 	}
 
-	params := repository.PaginationParams{Limit: 50, SortOrder: "DESC"}
-	if cursorStr := c.Query("cursor"); cursorStr != "" {
-		cursor, _ := uuid.Parse(cursorStr)
-		params.Cursor = &cursor
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
 	}
 
 	progresses, pagination, err := h.progressService.ListClassProgress(c.Request.Context(), classID, params)
@@ -164,7 +183,7 @@ func (h *ProgressHandler) GetProgress(c *gin.Context) {
 // @Tags Progress
 // @Security BearerAuth
 // @Produce json
-// @Param cursor query string false "Pagination cursor"
+// @Param page query int false "Page number"
 // @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
 // @Router /progress/flagged [get]
@@ -174,10 +193,16 @@ func (h *ProgressHandler) ListFlaggedStudents(c *gin.Context) {
 		return
 	}
 
-	params := repository.PaginationParams{Limit: 50, SortOrder: "DESC"}
-	if cursorStr := c.Query("cursor"); cursorStr != "" {
-		cursor, _ := uuid.Parse(cursorStr)
-		params.Cursor = &cursor
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
 	}
 
 	progresses, pagination, err := h.progressService.ListFlaggedStudents(c.Request.Context(), tenantID, params)

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"arc-lms/internal/domain"
@@ -32,7 +33,7 @@ func NewMeetingHandler(meetingService *service.MeetingService) *MeetingHandler {
 // @Security BearerAuth
 // @Produce json
 // @Param status query string false "Filter by status (SCHEDULED, LIVE, ENDED, CANCELLED)"
-// @Param cursor query string false "Pagination cursor"
+// @Param page query int false "Page number"
 // @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
 // @Router /meetings [get]
@@ -50,10 +51,16 @@ func (h *MeetingHandler) ListMeetings(c *gin.Context) {
 		status = &s
 	}
 
-	params := repository.PaginationParams{Limit: 50, SortOrder: "DESC"}
-	if cursorStr := c.Query("cursor"); cursorStr != "" {
-		cursor, _ := uuid.Parse(cursorStr)
-		params.Cursor = &cursor
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
 	}
 
 	var meetings []*domain.Meeting
@@ -433,7 +440,7 @@ func (h *MeetingHandler) AddRecording(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Param class_id path string true "Class ID"
-// @Param cursor query string false "Pagination cursor"
+// @Param page query int false "Page number"
 // @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
 // @Router /meetings/class/{class_id} [get]
@@ -444,10 +451,16 @@ func (h *MeetingHandler) ListMeetingsByClass(c *gin.Context) {
 		return
 	}
 
-	params := repository.PaginationParams{Limit: 50, SortOrder: "DESC"}
-	if cursorStr := c.Query("cursor"); cursorStr != "" {
-		cursor, _ := uuid.Parse(cursorStr)
-		params.Cursor = &cursor
+	params := repository.DefaultPaginationParams()
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			params.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			params.Limit = limit
+		}
 	}
 
 	meetings, pagination, err := h.meetingService.ListMeetingsByClass(c.Request.Context(), classID, params)

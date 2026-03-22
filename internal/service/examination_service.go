@@ -322,25 +322,22 @@ func (s *ExaminationService) ListExaminations(
 	params repository.PaginationParams,
 ) ([]*domain.Examination, *repository.PaginatedResult, error) {
 	var exams []*domain.Examination
+	var total int
 	var err error
 
 	if courseID != nil {
-		exams, err = s.examRepo.ListByCourse(ctx, *courseID, params)
+		exams, total, err = s.examRepo.ListByCourse(ctx, *courseID, params)
 	} else if termID != nil {
-		exams, err = s.examRepo.ListByTerm(ctx, *termID, params)
+		exams, total, err = s.examRepo.ListByTerm(ctx, *termID, params)
 	} else {
-		exams, err = s.examRepo.ListByTenant(ctx, tenantID, status, params)
+		exams, total, err = s.examRepo.ListByTenant(ctx, tenantID, status, params)
 	}
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list examinations: %w", err)
 	}
 
-	ids := make([]uuid.UUID, len(exams))
-	for i, exam := range exams {
-		ids[i] = exam.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return exams, &pagination, nil
 }
@@ -855,16 +852,12 @@ func (s *ExaminationService) ListSubmissions(
 	examID uuid.UUID,
 	params repository.PaginationParams,
 ) ([]*domain.ExaminationSubmission, *repository.PaginatedResult, error) {
-	submissions, err := s.examRepo.ListSubmissionsByExam(ctx, examID, params)
+	submissions, total, err := s.examRepo.ListSubmissionsByExam(ctx, examID, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list submissions: %w", err)
 	}
 
-	ids := make([]uuid.UUID, len(submissions))
-	for i, sub := range submissions {
-		ids[i] = sub.ID
-	}
-	pagination := repository.BuildPaginatedResult(ids, params.Limit)
+	pagination := repository.BuildPaginatedResult(total, params)
 
 	return submissions, &pagination, nil
 }
