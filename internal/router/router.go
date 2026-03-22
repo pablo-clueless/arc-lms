@@ -28,7 +28,6 @@ type RouterConfig struct {
 	AllowedOrigins []string
 }
 
-// RouterResult contains the configured router and WebSocket hub
 type RouterResult struct {
 	Router *gin.Engine
 	WSHub  *ws.Hub
@@ -50,7 +49,6 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 		AllowedOrigins: cfg.AllowedOrigins,
 	}))
 
-	// Initialize WebSocket hub
 	wsHub := ws.NewHub(nil)
 	go wsHub.Run()
 
@@ -181,7 +179,6 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 	systemConfigHandler := handler.NewSystemConfigHandler(systemConfigService)
 	wsHandler := handler.NewWebSocketHandler(wsHub, cfg.JWTManager, nil)
 
-	// WebSocket endpoint (outside v1 group, handles its own auth)
 	router.GET("/ws", wsHandler.HandleConnection)
 
 	v1 := router.Group("/api/v1")
@@ -511,7 +508,6 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 				systemConfigs.DELETE("/:id", systemConfigHandler.DeleteSystemConfig)
 			}
 
-			// WebSocket stats (admin only)
 			protected.GET("/ws/stats", wsHandler.GetStats)
 		}
 	}

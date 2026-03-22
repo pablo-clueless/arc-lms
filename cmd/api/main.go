@@ -81,7 +81,6 @@ func main() {
 	log.Println("✅ Router configured")
 	log.Println("🔌 WebSocket hub started")
 
-	// Initialize email service
 	emailService := email.NewEmailService(cfg.SMTP, nil)
 	if emailService.IsConfigured() {
 		log.Println("📧 Email service configured (Brevo SMTP)")
@@ -89,7 +88,6 @@ func main() {
 		log.Println("⚠️  Email service not configured, emails will be skipped")
 	}
 
-	// Initialize and start background job scheduler
 	jobScheduler := scheduler.SetupScheduler(&scheduler.SchedulerConfig{
 		DB:           db,
 		EmailService: emailService,

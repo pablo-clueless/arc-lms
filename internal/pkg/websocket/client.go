@@ -10,23 +10,13 @@ import (
 )
 
 const (
-	// Time allowed to write a message to the peer
-	writeWait = 10 * time.Second
-
-	// Time allowed to read the next pong message from the peer
-	pongWait = 60 * time.Second
-
-	// Send pings to peer with this period (must be less than pongWait)
-	pingPeriod = (pongWait * 9) / 10
-
-	// Maximum message size allowed from peer
+	writeWait      = 10 * time.Second
+	pongWait       = 60 * time.Second
+	pingPeriod     = (pongWait * 9) / 10
 	maxMessageSize = 512
-
-	// Send buffer size
 	sendBufferSize = 256
 )
 
-// Client represents a WebSocket client connection
 type Client struct {
 	hub      *Hub
 	conn     *websocket.Conn
@@ -36,7 +26,6 @@ type Client struct {
 	logger   *log.Logger
 }
 
-// NewClient creates a new WebSocket client
 func NewClient(hub *Hub, conn *websocket.Conn, userID, tenantID uuid.UUID, logger *log.Logger) *Client {
 	if logger == nil {
 		logger = log.Default()
@@ -50,8 +39,6 @@ func NewClient(hub *Hub, conn *websocket.Conn, userID, tenantID uuid.UUID, logge
 		logger:   logger,
 	}
 }
-
-// ReadPump pumps messages from the WebSocket connection to the hub
 func (c *Client) ReadPump() {
 	defer func() {
 		c.hub.Unregister(c)
@@ -74,12 +61,9 @@ func (c *Client) ReadPump() {
 			break
 		}
 
-		// Handle incoming messages (e.g., ping/pong, acknowledgments)
 		c.handleMessage(message)
 	}
 }
-
-// WritePump pumps messages from the hub to the WebSocket connection
 func (c *Client) WritePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
@@ -92,7 +76,7 @@ func (c *Client) WritePump() {
 		case message, ok := <-c.send:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
-				// Hub closed the channel
+
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
@@ -103,7 +87,6 @@ func (c *Client) WritePump() {
 			}
 			w.Write(message)
 
-			// Add queued messages to the current WebSocket message
 			n := len(c.send)
 			for i := 0; i < n; i++ {
 				w.Write([]byte{'\n'})
@@ -122,8 +105,6 @@ func (c *Client) WritePump() {
 		}
 	}
 }
-
-// handleMessage processes incoming WebSocket messages from the client
 func (c *Client) handleMessage(data []byte) {
 	var msg Message
 	if err := json.Unmarshal(data, &msg); err != nil {
@@ -133,7 +114,7 @@ func (c *Client) handleMessage(data []byte) {
 
 	switch msg.Type {
 	case MessageTypePing:
-		// Respond with pong
+
 		response := &Message{Type: MessageTypePong}
 		if responseData, err := json.Marshal(response); err == nil {
 			select {
@@ -142,12 +123,10 @@ func (c *Client) handleMessage(data []byte) {
 			}
 		}
 	default:
-		// Log unknown message types
+
 		c.logger.Printf("[WebSocket] Unknown message type: %s", msg.Type)
 	}
 }
-
-// Send sends a message to the client
 func (c *Client) Send(message *Message) error {
 	data, err := json.Marshal(message)
 	if err != nil {
@@ -161,8 +140,6 @@ func (c *Client) Send(message *Message) error {
 		return ErrSendBufferFull
 	}
 }
-
-// Close closes the client connection
 func (c *Client) Close() {
 	c.hub.Unregister(c)
 }

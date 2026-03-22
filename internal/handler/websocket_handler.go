@@ -17,19 +17,16 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		// In production, validate the origin against allowed origins
 		return true
 	},
 }
 
-// WebSocketHandler handles WebSocket connections
 type WebSocketHandler struct {
 	hub        *ws.Hub
 	jwtManager *jwt.Manager
 	logger     *log.Logger
 }
 
-// NewWebSocketHandler creates a new WebSocket handler
 func NewWebSocketHandler(hub *ws.Hub, jwtManager *jwt.Manager, logger *log.Logger) *WebSocketHandler {
 	if logger == nil {
 		logger = log.Default()
@@ -50,14 +47,12 @@ func NewWebSocketHandler(hub *ws.Hub, jwtManager *jwt.Manager, logger *log.Logge
 // @Failure 401 {object} errors.ErrorResponse
 // @Router /ws [get]
 func (h *WebSocketHandler) HandleConnection(c *gin.Context) {
-	// Get token from query parameter (WebSocket can't use Authorization header easily)
 	token := c.Query("token")
 	if token == "" {
 		errors.Unauthorized(c, "missing authentication token")
 		return
 	}
 
-	// Validate token
 	claims, err := h.jwtManager.ValidateAccessToken(token)
 	if err != nil {
 		errors.Unauthorized(c, "invalid or expired token")
@@ -66,29 +61,24 @@ func (h *WebSocketHandler) HandleConnection(c *gin.Context) {
 
 	userID := claims.UserID
 
-	// TenantID can be nil for SUPER_ADMIN
 	var tenantID uuid.UUID
 	if claims.TenantID != nil {
 		tenantID = *claims.TenantID
 	}
 
-	// Upgrade HTTP connection to WebSocket
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		h.logger.Printf("[WebSocket] Failed to upgrade connection: %v", err)
 		return
 	}
 
-	// Create client and register with hub
 	client := ws.NewClient(h.hub, conn, userID, tenantID, h.logger)
 	h.hub.Register(client)
 
-	// Start client read/write pumps
 	go client.WritePump()
 	go client.ReadPump()
 }
 
-// GetStats returns WebSocket connection statistics
 func (h *WebSocketHandler) GetStats(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"online_users":      h.hub.GetOnlineUserCount(),

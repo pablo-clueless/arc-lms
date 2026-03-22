@@ -8,41 +8,28 @@ import (
 	"github.com/google/uuid"
 )
 
-// MessageType represents the type of WebSocket message
 type MessageType string
 
 const (
-	MessageTypeNotification    MessageType = "NOTIFICATION"
+	MessageTypeNotification     MessageType = "NOTIFICATION"
 	MessageTypeNotificationRead MessageType = "NOTIFICATION_READ"
-	MessageTypePing            MessageType = "PING"
-	MessageTypePong            MessageType = "PONG"
+	MessageTypePing             MessageType = "PING"
+	MessageTypePong             MessageType = "PONG"
 )
 
-// Message represents a WebSocket message
 type Message struct {
 	Type    MessageType `json:"type"`
 	Payload interface{} `json:"payload"`
 }
 
-// Hub maintains the set of active clients and broadcasts messages to them
 type Hub struct {
-	// Registered clients mapped by user ID
-	clients map[uuid.UUID]map[*Client]bool
-
-	// Register requests from clients
-	register chan *Client
-
-	// Unregister requests from clients
+	clients    map[uuid.UUID]map[*Client]bool
+	register   chan *Client
 	unregister chan *Client
-
-	// Mutex for thread-safe access to clients map
-	mu sync.RWMutex
-
-	// Logger
-	logger *log.Logger
+	mu         sync.RWMutex
+	logger     *log.Logger
 }
 
-// NewHub creates a new Hub
 func NewHub(logger *log.Logger) *Hub {
 	if logger == nil {
 		logger = log.Default()
@@ -55,7 +42,6 @@ func NewHub(logger *log.Logger) *Hub {
 	}
 }
 
-// Run starts the hub's main loop
 func (h *Hub) Run() {
 	for {
 		select {
@@ -85,7 +71,6 @@ func (h *Hub) Run() {
 	}
 }
 
-// SendToUser sends a message to all connections of a specific user
 func (h *Hub) SendToUser(userID uuid.UUID, message *Message) {
 	data, err := json.Marshal(message)
 	if err != nil {
@@ -106,7 +91,7 @@ func (h *Hub) SendToUser(userID uuid.UUID, message *Message) {
 		select {
 		case client.send <- data:
 		default:
-			// Client's send buffer is full, close it
+
 			h.mu.RUnlock()
 			h.mu.Lock()
 			close(client.send)
@@ -118,14 +103,12 @@ func (h *Hub) SendToUser(userID uuid.UUID, message *Message) {
 	h.mu.RUnlock()
 }
 
-// SendToUsers sends a message to multiple users
 func (h *Hub) SendToUsers(userIDs []uuid.UUID, message *Message) {
 	for _, userID := range userIDs {
 		h.SendToUser(userID, message)
 	}
 }
 
-// Broadcast sends a message to all connected clients
 func (h *Hub) Broadcast(message *Message) {
 	data, err := json.Marshal(message)
 	if err != nil {
@@ -141,13 +124,12 @@ func (h *Hub) Broadcast(message *Message) {
 			select {
 			case client.send <- data:
 			default:
-				// Skip clients with full buffers
+
 			}
 		}
 	}
 }
 
-// IsUserOnline checks if a user has any active connections
 func (h *Hub) IsUserOnline(userID uuid.UUID) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -155,14 +137,12 @@ func (h *Hub) IsUserOnline(userID uuid.UUID) bool {
 	return ok && len(clients) > 0
 }
 
-// GetOnlineUserCount returns the number of online users
 func (h *Hub) GetOnlineUserCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.clients)
 }
 
-// GetConnectionCount returns the total number of connections
 func (h *Hub) GetConnectionCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -173,12 +153,10 @@ func (h *Hub) GetConnectionCount() int {
 	return count
 }
 
-// Register adds a client to the hub
 func (h *Hub) Register(client *Client) {
 	h.register <- client
 }
 
-// Unregister removes a client from the hub
 func (h *Hub) Unregister(client *Client) {
 	h.unregister <- client
 }
