@@ -50,14 +50,14 @@ func (h *TimetableHandler) GenerateTimetable(c *gin.Context) {
 	}
 
 	userID, _ := c.Get("user_id")
-	role, _ := c.Get("role")
+	role, _ := GetRoleFromContext(c)
 
 	timetable, err := h.timetableService.GenerateTimetable(
 		c.Request.Context(),
 		tenantID.(uuid.UUID),
 		&req,
 		userID.(uuid.UUID),
-		role.(domain.Role),
+		role,
 		c.ClientIP(),
 	)
 	if err != nil {
@@ -175,13 +175,13 @@ func (h *TimetableHandler) PublishTimetable(c *gin.Context) {
 	}
 
 	userID, _ := c.Get("user_id")
-	role, _ := c.Get("role")
+	role, _ := GetRoleFromContext(c)
 
 	timetable, err := h.timetableService.PublishTimetable(
 		c.Request.Context(),
 		id,
 		userID.(uuid.UUID),
-		role.(domain.Role),
+		role,
 		c.ClientIP(),
 	)
 	if err != nil {
@@ -217,7 +217,7 @@ func (h *TimetableHandler) RegenerateTimetable(c *gin.Context) {
 	}
 
 	userID, _ := c.Get("user_id")
-	role, _ := c.Get("role")
+	role, _ := GetRoleFromContext(c)
 
 	timetable, err := h.timetableService.RegenerateTimetable(
 		c.Request.Context(),
@@ -226,7 +226,7 @@ func (h *TimetableHandler) RegenerateTimetable(c *gin.Context) {
 		req.TermID,
 		req.Notes,
 		userID.(uuid.UUID),
-		role.(domain.Role),
+		role,
 		c.ClientIP(),
 	)
 	if err != nil {
@@ -349,14 +349,14 @@ func (h *TimetableHandler) CreateSwapRequest(c *gin.Context) {
 	}
 
 	userID, _ := c.Get("user_id")
-	role, _ := c.Get("role")
+	role, _ := GetRoleFromContext(c)
 
 	swapRequest, err := h.timetableService.CreateSwapRequest(
 		c.Request.Context(),
 		tenantID.(uuid.UUID),
 		&req,
 		userID.(uuid.UUID),
-		role.(domain.Role),
+		role,
 		c.ClientIP(),
 	)
 	if err != nil {
@@ -535,13 +535,13 @@ func (h *TimetableHandler) ApproveSwapRequest(c *gin.Context) {
 	}
 
 	userID, _ := c.Get("user_id")
-	role, _ := c.Get("role")
+	role, _ := GetRoleFromContext(c)
 
 	swapRequest, err := h.timetableService.ApproveSwapRequest(
 		c.Request.Context(),
 		id,
 		userID.(uuid.UUID),
-		role.(domain.Role),
+		role,
 		c.ClientIP(),
 	)
 	if err != nil {
@@ -580,14 +580,14 @@ func (h *TimetableHandler) RejectSwapRequest(c *gin.Context) {
 	}
 
 	userID, _ := c.Get("user_id")
-	role, _ := c.Get("role")
+	role, _ := GetRoleFromContext(c)
 
 	swapRequest, err := h.timetableService.RejectSwapRequest(
 		c.Request.Context(),
 		id,
 		req.Reason,
 		userID.(uuid.UUID),
-		role.(domain.Role),
+		role,
 		c.ClientIP(),
 	)
 	if err != nil {
@@ -630,14 +630,14 @@ func (h *TimetableHandler) EscalateSwapRequest(c *gin.Context) {
 	}
 
 	userID, _ := c.Get("user_id")
-	role, _ := c.Get("role")
+	role, _ := GetRoleFromContext(c)
 
 	swapRequest, err := h.timetableService.EscalateSwapRequest(
 		c.Request.Context(),
 		id,
 		req.Reason,
 		userID.(uuid.UUID),
-		role.(domain.Role),
+		role,
 		c.ClientIP(),
 	)
 	if err != nil {
@@ -680,14 +680,14 @@ func (h *TimetableHandler) AdminOverrideSwapRequest(c *gin.Context) {
 	}
 
 	userID, _ := c.Get("user_id")
-	role, _ := c.Get("role")
+	role, _ := GetRoleFromContext(c)
 
 	swapRequest, err := h.timetableService.AdminOverrideSwapRequest(
 		c.Request.Context(),
 		id,
 		req.Reason,
 		userID.(uuid.UUID),
-		role.(domain.Role),
+		role,
 		c.ClientIP(),
 	)
 	if err != nil {

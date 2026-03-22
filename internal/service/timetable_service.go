@@ -96,6 +96,24 @@ type TimetableWithPeriods struct {
 	Periods   []*domain.Period  `json:"periods"`
 }
 
+// TimetableListItem represents a timetable with its associated class and term
+type TimetableListItem struct {
+	ID                uuid.UUID              `json:"id"`
+	TenantID          uuid.UUID              `json:"tenant_id"`
+	Class             *domain.Class          `json:"class"`
+	Term              *domain.Term           `json:"term"`
+	Status            domain.TimetableStatus `json:"status"`
+	GeneratedAt       time.Time              `json:"generated_at"`
+	GeneratedBy       uuid.UUID              `json:"generated_by"`
+	PublishedAt       *time.Time             `json:"published_at,omitempty"`
+	PublishedBy       *uuid.UUID             `json:"published_by,omitempty"`
+	GenerationVersion int                    `json:"generation_version"`
+	Notes             *string                `json:"notes,omitempty"`
+	CreatedAt         time.Time              `json:"created_at"`
+	UpdatedAt         time.Time              `json:"updated_at"`
+	ArchivedAt        *time.Time             `json:"archived_at,omitempty"`
+}
+
 // GenerateTimetable automatically generates a timetable for a class
 func (s *TimetableService) GenerateTimetable(
 	ctx context.Context,
@@ -388,14 +406,14 @@ func (s *TimetableService) GetTimetableByClassAndTerm(ctx context.Context, class
 	}, nil
 }
 
-// ListTimetables lists timetables for a class or term
+// ListTimetables lists timetables for a class or term with full class and term objects
 func (s *TimetableService) ListTimetables(
 	ctx context.Context,
 	tenantID uuid.UUID,
 	classID *uuid.UUID,
 	termID *uuid.UUID,
 	params repository.PaginationParams,
-) ([]*domain.Timetable, *repository.PaginatedResult, error) {
+) ([]*TimetableListItem, *repository.PaginatedResult, error) {
 	var timetables []*domain.Timetable
 	var total int
 	var err error
@@ -412,9 +430,55 @@ func (s *TimetableService) ListTimetables(
 		return nil, nil, fmt.Errorf("failed to list timetables: %w", err)
 	}
 
+	// Build list items with full class and term objects
+	items := make([]*TimetableListItem, 0, len(timetables))
+
+	// Cache classes and terms to avoid repeated queries
+	classCache := make(map[uuid.UUID]*domain.Class)
+	termCache := make(map[uuid.UUID]*domain.Term)
+
+	for _, t := range timetables {
+		// Get class (from cache or fetch)
+		class, ok := classCache[t.ClassID]
+		if !ok {
+			class, err = s.classRepo.Get(ctx, t.ClassID)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to get class: %w", err)
+			}
+			classCache[t.ClassID] = class
+		}
+
+		// Get term (from cache or fetch)
+		term, ok := termCache[t.TermID]
+		if !ok {
+			term, err = s.termRepo.Get(ctx, t.TermID)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to get term: %w", err)
+			}
+			termCache[t.TermID] = term
+		}
+
+		items = append(items, &TimetableListItem{
+			ID:                t.ID,
+			TenantID:          t.TenantID,
+			Class:             class,
+			Term:              term,
+			Status:            t.Status,
+			GeneratedAt:       t.GeneratedAt,
+			GeneratedBy:       t.GeneratedBy,
+			PublishedAt:       t.PublishedAt,
+			PublishedBy:       t.PublishedBy,
+			GenerationVersion: t.GenerationVersion,
+			Notes:             t.Notes,
+			CreatedAt:         t.CreatedAt,
+			UpdatedAt:         t.UpdatedAt,
+			ArchivedAt:        t.ArchivedAt,
+		})
+	}
+
 	pagination := repository.BuildPaginatedResult(total, params)
 
-	return timetables, &pagination, nil
+	return items, &pagination, nil
 }
 
 // PublishTimetable publishes a draft timetable
