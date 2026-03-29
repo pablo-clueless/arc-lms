@@ -189,17 +189,18 @@ func (s *EnrollmentService) CreateAndEnrollStudent(
 
 	// Create the student user
 	student := &domain.User{
-		ID:        uuid.New(),
-		TenantID:  &tenantID,
-		Role:      domain.RoleStudent,
-		Email:     req.Email,
-		FirstName: req.FirstName,
-		LastName:  req.LastName,
-		MiddleName: req.MiddleName,
-		Phone:     req.Phone,
-		Status:    domain.UserStatusActive,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:                      uuid.New(),
+		TenantID:                &tenantID,
+		Role:                    domain.RoleStudent,
+		Email:                   req.Email,
+		FirstName:               req.FirstName,
+		LastName:                req.LastName,
+		MiddleName:              req.MiddleName,
+		Phone:                   req.Phone,
+		Status:                  domain.UserStatusActive,
+		NotificationPreferences: domain.DefaultNotificationPreferences(),
+		CreatedAt:               now,
+		UpdatedAt:               now,
 	}
 
 	if err := s.userRepo.Create(ctx, student); err != nil {

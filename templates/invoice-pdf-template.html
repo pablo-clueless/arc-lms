@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&family=Hedvig+Letters+Serif:opsz@12..24&display=swap"
+    rel="stylesheet">
+  <title>Invoice {{ .InvoiceNumber }}</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: "Figtree", sans-serif;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-size: 14px;
+      color: #333;
+      background: #fff;
+      padding: 40px;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      font-family: "Hedvig Letters Serif", serif;
+    }
+
+    .invoice-container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 40px;
+      padding-bottom: 20px;
+      border-bottom: 2px solid #171717;
+    }
+
+    .company-info h1 {
+      font-size: 28px;
+      color: #171717;
+      margin-bottom: 5px;
+    }
+
+    .company-info p {
+      color: #171717;
+      font-size: 12px;
+    }
+
+    .invoice-title {
+      text-align: right;
+    }
+
+    .invoice-title h2 {
+      font-size: 32px;
+      color: #171717;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    .invoice-title .invoice-number {
+      font-size: 16px;
+      color: #171717;
+      font-weight: 600;
+      margin-top: 5px;
+    }
+
+    .billing-section {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 40px;
+    }
+
+    .billing-to,
+    .invoice-details {
+      width: 48%;
+    }
+
+    .section-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #171717;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+
+    .billing-to h3 {
+      font-size: 18px;
+      color: #171717;
+      margin-bottom: 5px;
+    }
+
+    .billing-to p {
+      color: #171717;
+      line-height: 1.6;
+    }
+
+    .invoice-details table {
+      width: 100%;
+    }
+
+    .invoice-details td {
+      padding: 5px 0;
+    }
+
+    .invoice-details td:first-child {
+      color: #171717;
+      width: 120px;
+    }
+
+    .invoice-details td:last-child {
+      font-weight: 500;
+      text-align: right;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .status-pending {
+      background: #FFF3CD;
+      color: #856404;
+    }
+
+    .status-paid {
+      background: #D4EDDA;
+      color: #155724;
+    }
+
+    .status-overdue {
+      background: #F8D7DA;
+      color: #721C24;
+    }
+
+    .status-voided {
+      background: #E2E3E5;
+      color: #383D41;
+    }
+
+    .status-disputed {
+      background: #FFE5D0;
+      color: #8A4500;
+    }
+
+    .line-items {
+      margin-bottom: 30px;
+    }
+
+    .line-items table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .line-items th {
+      background: #171717;
+      color: #fff;
+      padding: 12px 15px;
+      text-align: left;
+      font-weight: 500;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .line-items th:last-child,
+    .line-items td:last-child {
+      text-align: right;
+    }
+
+    .line-items th:nth-child(2),
+    .line-items td:nth-child(2),
+    .line-items th:nth-child(3),
+    .line-items td:nth-child(3) {
+      text-align: center;
+    }
+
+    .line-items td {
+      padding: 15px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .line-items tbody tr:hover {
+      background: #f9f9f9;
+    }
+
+    .totals {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 40px;
+    }
+
+    .totals table {
+      width: 300px;
+    }
+
+    .totals td {
+      padding: 8px 0;
+    }
+
+    .totals td:first-child {
+      color: #171717;
+    }
+
+    .totals td:last-child {
+      text-align: right;
+      font-weight: 500;
+    }
+
+    .totals .total-row td {
+      font-size: 18px;
+      font-weight: 700;
+      color: #171717;
+      border-top: 2px solid #171717;
+      padding-top: 15px;
+    }
+
+    .totals .total-row td:last-child {
+      color: #27AE60;
+    }
+
+    .payment-info {
+      background: #F8F9FA;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+    }
+
+    .payment-info h4 {
+      color: #171717;
+      margin-bottom: 10px;
+    }
+
+    .payment-info p {
+      color: #171717;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .footer {
+      text-align: center;
+      padding-top: 30px;
+      border-top: 1px solid #eee;
+      color: #171717;
+      font-size: 12px;
+    }
+
+    .footer p {
+      margin-bottom: 5px;
+    }
+
+    .currency {
+      font-family: 'Segoe UI', sans-serif;
+    }
+
+    @media print {
+      body {
+        padding: 20px;
+      }
+
+      .invoice-container {
+        max-width: 100%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="invoice-container">
+    <div class="header">
+      <div class="company-info">
+        <h1>ArcLMS</h1>
+      </div>
+      <div class="invoice-title">
+        <h2>Invoice</h2>
+      </div>
+    </div>
+
+    <div class="billing-section">
+      <div class="billing-to">
+        <div class="section-title">Bill To</div>
+        <h3>{{ .TenantName }}</h3>
+        <p>
+          {{ .TenantAddress }}<br>
+          {{ .BillingEmail }}<br>
+          {{ if .BillingPhone }}{{ .BillingPhone }}{{ end }}
+        </p>
+      </div>
+      <div class="invoice-details">
+        <div class="section-title">Invoice Details</div>
+        <table>
+          <tr>
+            <td>Invoice Number:</td>
+            <td>{{ .InvoiceNumber }}</td>
+          </tr>
+          <tr>
+            <td>Invoice Date:</td>
+            <td>{{ .IssuedDate }}</td>
+          </tr>
+          <tr>
+            <td>Due Date:</td>
+            <td>{{ .DueDate }}</td>
+          </tr>
+          <tr>
+            <td>Status:</td>
+            <td>
+              <span class="status-badge status-{{ .StatusClass }}">{{ .Status }}</span>
+            </td>
+          </tr>
+          {{ if .PaidAt }}
+          <tr>
+            <td>Paid On:</td>
+            <td>{{ .PaidAt }}</td>
+          </tr>
+          {{ end }}
+        </table>
+      </div>
+    </div>
+
+    <div class="line-items">
+      <table>
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th>Quantity</th>
+            <th>Unit Price</th>
+            <th>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ range .LineItems }}
+          <tr>
+            <td>{{ .Description }}</td>
+            <td>{{ .Quantity }}</td>
+            <td><span class="currency">₦</span>{{ .UnitPriceFormatted }}</td>
+            <td><span class="currency">₦</span>{{ .AmountFormatted }}</td>
+          </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="totals">
+      <table>
+        <tr>
+          <td>Subtotal:</td>
+          <td><span class="currency">₦</span>{{ .SubtotalFormatted }}</td>
+        </tr>
+        {{ if .TaxAmount }}
+        <tr>
+          <td>Tax:</td>
+          <td><span class="currency">₦</span>{{ .TaxFormatted }}</td>
+        </tr>
+        {{ end }}
+        {{ if .DiscountAmount }}
+        <tr>
+          <td>Discount:</td>
+          <td>-<span class="currency">₦</span>{{ .DiscountFormatted }}</td>
+        </tr>
+        {{ end }}
+        <tr class="total-row">
+          <td>Total:</td>
+          <td><span class="currency">₦</span>{{ .TotalFormatted }}</td>
+        </tr>
+      </table>
+    </div>
+
+    {{ if eq .Status "PENDING" }}
+    <div class="payment-info">
+      <h4>Payment Information</h4>
+      <p>
+        Please make payment before the due date to avoid service interruption.<br>
+        For payment inquiries, contact our billing department.
+      </p>
+    </div>
+    {{ end }}
+
+    {{ if .Notes }}
+    <div class="payment-info">
+      <h4>Notes</h4>
+      <p>{{ .Notes }}</p>
+    </div>
+    {{ end }}
+
+    <div class="footer">
+      <p><strong>Thank you for your business!</strong></p>
+      <p>This invoice was generated by ArcLMS</p>
+      <p>Generated on {{ .GeneratedAt }}</p>
+    </div>
+  </div>
+</body>
+
+</html>

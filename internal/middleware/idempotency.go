@@ -137,10 +137,16 @@ func (w *bodyLogWriter) WriteString(s string) (int, error) {
 
 // ReadFrom captures the response body
 func (w *bodyLogWriter) ReadFrom(r io.Reader) (n int64, err error) {
+	// Track the buffer position before copying
+	startPos := w.body.Len()
+
 	n, err = io.Copy(w.body, r)
 	if err != nil {
 		return n, err
 	}
-	_, err = w.ResponseWriter.Write(w.body.Bytes())
+
+	// Only write the newly added data to avoid duplicates
+	newData := w.body.Bytes()[startPos:]
+	_, err = w.ResponseWriter.Write(newData)
 	return n, err
 }

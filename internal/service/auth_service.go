@@ -165,19 +165,20 @@ func (s *AuthService) Register(ctx context.Context, req *RegisterRequest, actorI
 
 	// Create user
 	user := &domain.User{
-		ID:           uuid.New(),
-		TenantID:     req.TenantID,
-		Role:         req.Role,
-		Email:        req.Email,
-		PasswordHash: hashedPassword,
-		FirstName:    req.FirstName,
-		LastName:     req.LastName,
-		MiddleName:   req.MiddleName,
-		Phone:        req.Phone,
-		Status:       domain.UserStatusActive,
-		Permissions:  req.Permissions,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		ID:                      uuid.New(),
+		TenantID:                req.TenantID,
+		Role:                    req.Role,
+		Email:                   req.Email,
+		PasswordHash:            hashedPassword,
+		FirstName:               req.FirstName,
+		LastName:                req.LastName,
+		MiddleName:              req.MiddleName,
+		Phone:                   req.Phone,
+		Status:                  domain.UserStatusActive,
+		Permissions:             req.Permissions,
+		NotificationPreferences: domain.DefaultNotificationPreferences(),
+		CreatedAt:               time.Now(),
+		UpdatedAt:               time.Now(),
 	}
 
 	if err := s.userRepo.Create(ctx, user); err != nil {

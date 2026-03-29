@@ -369,3 +369,77 @@ func (r *TenantRepository) Reactivate(ctx context.Context, id uuid.UUID, tx *sql
 
 	return nil
 }
+
+// ListActive retrieves all active tenants
+func (r *TenantRepository) ListActive(ctx context.Context) ([]*domain.Tenant, error) {
+	query := `
+		SELECT
+			id, name, school_type, contact_email, address, logo,
+			status, configuration, billing_contact, suspension_reason,
+			principal_admin_id, created_at, updated_at, suspended_at
+		FROM tenants
+		WHERE status = $1
+		ORDER BY name ASC
+	`
+
+	rows, err := r.GetDB().QueryContext(ctx, query, domain.TenantStatusActive)
+	if err != nil {
+		return nil, repository.ParseError(err)
+	}
+	defer rows.Close()
+
+	tenants := make([]*domain.Tenant, 0)
+	for rows.Next() {
+		var tenant domain.Tenant
+		var configJSON, billingJSON []byte
+		var logo, suspensionReason sql.NullString
+		var suspendedAt sql.NullTime
+
+		err := rows.Scan(
+			&tenant.ID,
+			&tenant.Name,
+			&tenant.SchoolType,
+			&tenant.ContactEmail,
+			&tenant.Address,
+			&logo,
+			&tenant.Status,
+			&configJSON,
+			&billingJSON,
+			&suspensionReason,
+			&tenant.PrincipalAdminID,
+			&tenant.CreatedAt,
+			&tenant.UpdatedAt,
+			&suspendedAt,
+		)
+
+		if err != nil {
+			return nil, repository.ParseError(err)
+		}
+
+		if logo.Valid {
+			tenant.Logo = logo.String
+		}
+		if suspensionReason.Valid {
+			tenant.SuspensionReason = &suspensionReason.String
+		}
+		if suspendedAt.Valid {
+			tenant.SuspendedAt = &suspendedAt.Time
+		}
+
+		if err := json.Unmarshal(configJSON, &tenant.Configuration); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal configuration: %w", err)
+		}
+
+		if err := json.Unmarshal(billingJSON, &tenant.BillingContact); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal billing contact: %w", err)
+		}
+
+		tenants = append(tenants, &tenant)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, repository.ParseError(err)
+	}
+
+	return tenants, nil
+}

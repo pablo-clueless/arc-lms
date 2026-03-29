@@ -28,10 +28,43 @@ const (
 
 // NotificationPreference holds user notification settings
 type NotificationPreference struct {
-	EventType     string `json:"event_type" validate:"required"`
-	InAppEnabled  bool   `json:"in_app_enabled"`
-	PushEnabled   bool   `json:"push_enabled"`
-	EmailEnabled  bool   `json:"email_enabled"`
+	EventType    string `json:"event_type" validate:"required"`
+	InAppEnabled bool   `json:"in_app_enabled"`
+	PushEnabled  bool   `json:"push_enabled"`
+	EmailEnabled bool   `json:"email_enabled"`
+}
+
+// DefaultNotificationPreferences returns notification preferences with all channels enabled
+// for all event types
+func DefaultNotificationPreferences() []NotificationPreference {
+	eventTypes := []string{
+		"QUIZ_PUBLISHED",
+		"ASSIGNMENT_PUBLISHED",
+		"ASSIGNMENT_DEADLINE_APPROACHING",
+		"EXAMINATION_SCHEDULED",
+		"EXAMINATION_WINDOW_OPEN",
+		"EXAMINATION_WINDOW_CLOSE",
+		"GRADE_PUBLISHED",
+		"TIMETABLE_PUBLISHED",
+		"TIMETABLE_UPDATED",
+		"MEETING_SCHEDULED",
+		"MEETING_CANCELLED",
+		"MEETING_STARTING",
+		"INVOICE_GENERATED",
+		"PAYMENT_OVERDUE",
+		"CUSTOM",
+	}
+
+	preferences := make([]NotificationPreference, len(eventTypes))
+	for i, eventType := range eventTypes {
+		preferences[i] = NotificationPreference{
+			EventType:    eventType,
+			InAppEnabled: true,
+			PushEnabled:  true,
+			EmailEnabled: true,
+		}
+	}
+	return preferences
 }
 
 // User represents a platform user (SUPER_ADMIN, ADMIN, TUTOR, or STUDENT)

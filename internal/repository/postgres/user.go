@@ -31,7 +31,12 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 		return fmt.Errorf("failed to marshal permissions: %w", err)
 	}
 
-	preferencesJSON, err := json.Marshal(user.NotificationPreferences)
+	// Ensure notification preferences defaults to all enabled if not set
+	notificationPrefs := user.NotificationPreferences
+	if notificationPrefs == nil || len(notificationPrefs) == 0 {
+		notificationPrefs = domain.DefaultNotificationPreferences()
+	}
+	preferencesJSON, err := json.Marshal(notificationPrefs)
 	if err != nil {
 		return fmt.Errorf("failed to marshal notification preferences: %w", err)
 	}

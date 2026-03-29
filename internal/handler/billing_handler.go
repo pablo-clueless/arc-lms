@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -17,12 +19,21 @@ import (
 // BillingHandler handles billing HTTP requests
 type BillingHandler struct {
 	billingService *service.BillingService
+	pdfService     *service.PDFService
+	tenantRepo     TenantRepository
+}
+
+// TenantRepository interface for getting tenant data
+type TenantRepository interface {
+	Get(ctx context.Context, id uuid.UUID) (*domain.Tenant, error)
 }
 
 // NewBillingHandler creates a new billing handler
-func NewBillingHandler(billingService *service.BillingService) *BillingHandler {
+func NewBillingHandler(billingService *service.BillingService, pdfService *service.PDFService, tenantRepo TenantRepository) *BillingHandler {
 	return &BillingHandler{
 		billingService: billingService,
+		pdfService:     pdfService,
+		tenantRepo:     tenantRepo,
 	}
 }
 
@@ -114,6 +125,64 @@ func (h *BillingHandler) GetInvoice(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, invoice)
+}
+
+// DownloadInvoicePDF godoc
+// @Summary Download invoice as PDF
+// @Description Download an invoice as a PDF file
+// @Tags Billing
+// @Security BearerAuth
+// @Produce application/pdf
+// @Param id path string true "Invoice ID"
+// @Success 200 {file} binary
+// @Router /billing/invoices/{id}/pdf [get]
+func (h *BillingHandler) DownloadInvoicePDF(c *gin.Context) {
+	tenantID, _, ok := h.getTenantAndUserID(c)
+	if !ok {
+		return
+	}
+
+	role := h.getUserRole(c)
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		errors.BadRequest(c, "invalid invoice ID", nil)
+		return
+	}
+
+	invoice, err := h.billingService.GetInvoice(c.Request.Context(), id)
+	if err != nil {
+		errors.NotFound(c, "invoice not found")
+		return
+	}
+
+	// Non-superadmins can only view their own tenant's invoices
+	if role != domain.RoleSuperAdmin && invoice.TenantID != tenantID {
+		errors.Forbidden(c, "you can only view your own invoices")
+		return
+	}
+
+	// Get tenant information for the invoice
+	tenant, err := h.tenantRepo.Get(c.Request.Context(), invoice.TenantID)
+	if err != nil {
+		errors.InternalError(c, "failed to get tenant information")
+		return
+	}
+
+	// Generate PDF
+	pdfBytes, err := h.pdfService.GenerateInvoicePDF(c.Request.Context(), invoice, tenant)
+	if err != nil {
+		errors.InternalError(c, "failed to generate PDF")
+		return
+	}
+
+	// Set response headers for PDF download
+	filename := fmt.Sprintf("invoice-%s.pdf", invoice.InvoiceNumber)
+	c.Header("Content-Type", "application/pdf")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	c.Header("Content-Length", fmt.Sprintf("%d", len(pdfBytes)))
+
+	c.Data(http.StatusOK, "application/pdf", pdfBytes)
 }
 
 // MarkInvoiceAsPaid godoc
@@ -751,6 +820,41 @@ func (h *BillingHandler) GetSubscriptionStatistics(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, stats)
+}
+
+// GenerateInvoicesForActiveTerm godoc
+// @Summary Generate invoices for all tenants
+// @Description Generate invoices for all tenants with active terms (SuperAdmin only)
+// @Tags Billing
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} service.GenerateInvoicesForActiveTermResponse
+// @Router /billing/invoices/generate [post]
+func (h *BillingHandler) GenerateInvoicesForActiveTerm(c *gin.Context) {
+	_, userID, ok := h.getTenantAndUserID(c)
+	if !ok {
+		return
+	}
+
+	role := h.getUserRole(c)
+
+	// Only SuperAdmin can generate invoices for all tenants
+	if role != domain.RoleSuperAdmin {
+		errors.Forbidden(c, "only super admins can generate invoices for all tenants")
+		return
+	}
+
+	response, err := h.billingService.GenerateInvoicesForActiveTerm(
+		c.Request.Context(),
+		userID,
+		c.ClientIP(),
+	)
+	if err != nil {
+		errors.InternalError(c, err.Error())
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // Helper method to get tenant and user IDs from context

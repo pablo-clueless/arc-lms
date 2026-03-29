@@ -333,20 +333,21 @@ func (s *UserService) InviteUser(
 
 	// Create user in PENDING status
 	user := &domain.User{
-		ID:               uuid.New(),
-		TenantID:         &tenantID,
-		Role:             req.Role,
-		Email:            req.Email,
-		FirstName:        req.FirstName,
-		LastName:         req.LastName,
-		MiddleName:       req.MiddleName,
-		Phone:            req.Phone,
-		Status:           domain.UserStatusPending,
-		Permissions:      permissions,
-		InvitationToken:  &invitationToken,
-		InvitationExpiry: &expiry,
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		ID:                      uuid.New(),
+		TenantID:                &tenantID,
+		Role:                    req.Role,
+		Email:                   req.Email,
+		FirstName:               req.FirstName,
+		LastName:                req.LastName,
+		MiddleName:              req.MiddleName,
+		Phone:                   req.Phone,
+		Status:                  domain.UserStatusPending,
+		Permissions:             permissions,
+		NotificationPreferences: domain.DefaultNotificationPreferences(),
+		InvitationToken:         &invitationToken,
+		InvitationExpiry:        &expiry,
+		CreatedAt:               time.Now(),
+		UpdatedAt:               time.Now(),
 	}
 
 	if err := s.userRepo.Create(ctx, user); err != nil {
@@ -551,19 +552,20 @@ func (s *UserService) CreateSuperAdmin(
 
 	// Create SUPER_ADMIN user
 	user := &domain.User{
-		ID:           uuid.New(),
-		TenantID:     nil, // SUPER_ADMIN has no tenant
-		Role:         domain.RoleSuperAdmin,
-		Email:        req.Email,
-		PasswordHash: hashedPassword,
-		FirstName:    req.FirstName,
-		LastName:     req.LastName,
-		MiddleName:   req.MiddleName,
-		Phone:        req.Phone,
-		Status:       domain.UserStatusActive,
-		Permissions:  permissions,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		ID:                      uuid.New(),
+		TenantID:                nil, // SUPER_ADMIN has no tenant
+		Role:                    domain.RoleSuperAdmin,
+		Email:                   req.Email,
+		PasswordHash:            hashedPassword,
+		FirstName:               req.FirstName,
+		LastName:                req.LastName,
+		MiddleName:              req.MiddleName,
+		Phone:                   req.Phone,
+		Status:                  domain.UserStatusActive,
+		Permissions:             permissions,
+		NotificationPreferences: domain.DefaultNotificationPreferences(),
+		CreatedAt:               time.Now(),
+		UpdatedAt:               time.Now(),
 	}
 
 	if err := s.userRepo.Create(ctx, user); err != nil {

@@ -702,3 +702,187 @@ func (s *BillingService) GetSubscriptionStatistics(ctx context.Context) (*postgr
 	}
 	return stats, nil
 }
+
+// GenerateInvoiceResult represents the result of generating an invoice for a tenant
+type GenerateInvoiceResult struct {
+	TenantID     uuid.UUID        `json:"tenant_id"`
+	TenantName   string           `json:"tenant_name"`
+	Invoice      *domain.Invoice  `json:"invoice,omitempty"`
+	Error        string           `json:"error,omitempty"`
+	StudentCount int              `json:"student_count"`
+	Skipped      bool             `json:"skipped"`
+	SkipReason   string           `json:"skip_reason,omitempty"`
+}
+
+// GenerateInvoicesForActiveTermResponse represents the response for bulk invoice generation
+type GenerateInvoicesForActiveTermResponse struct {
+	TotalTenants    int                      `json:"total_tenants"`
+	InvoicesCreated int                      `json:"invoices_created"`
+	Skipped         int                      `json:"skipped"`
+	Failed          int                      `json:"failed"`
+	Results         []GenerateInvoiceResult  `json:"results"`
+}
+
+// GenerateInvoicesForActiveTerm generates invoices for all tenants with active terms (SuperAdmin only)
+func (s *BillingService) GenerateInvoicesForActiveTerm(
+	ctx context.Context,
+	actorID uuid.UUID,
+	ipAddress string,
+) (*GenerateInvoicesForActiveTermResponse, error) {
+	if s.invoiceRepo == nil || s.tenantRepo == nil || s.enrollmentRepo == nil {
+		return nil, fmt.Errorf("billing service not fully configured")
+	}
+
+	// Get all active tenants
+	tenants, err := s.tenantRepo.ListActive(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list active tenants: %w", err)
+	}
+
+	response := &GenerateInvoicesForActiveTermResponse{
+		TotalTenants: len(tenants),
+		Results:      make([]GenerateInvoiceResult, 0, len(tenants)),
+	}
+
+	for _, tenant := range tenants {
+		result := GenerateInvoiceResult{
+			TenantID:   tenant.ID,
+			TenantName: tenant.Name,
+		}
+
+		// Get active session for tenant
+		activeSession, err := s.getActiveSessionForTenant(ctx, tenant.ID)
+		if err != nil {
+			result.Skipped = true
+			result.SkipReason = "no active session"
+			response.Skipped++
+			response.Results = append(response.Results, result)
+			continue
+		}
+
+		// Get active term for session
+		activeTerm, err := s.getActiveTermForSession(ctx, activeSession.ID)
+		if err != nil {
+			result.Skipped = true
+			result.SkipReason = "no active term"
+			response.Skipped++
+			response.Results = append(response.Results, result)
+			continue
+		}
+
+		// Check if invoice already exists for this term
+		existingInvoice, _ := s.invoiceRepo.GetByTerm(ctx, activeTerm.ID)
+		if existingInvoice != nil {
+			result.Skipped = true
+			result.SkipReason = fmt.Sprintf("invoice already exists: %s", existingInvoice.InvoiceNumber)
+			result.Invoice = existingInvoice
+			response.Skipped++
+			response.Results = append(response.Results, result)
+			continue
+		}
+
+		// Count active students for this tenant/session
+		studentCount, err := s.enrollmentRepo.CountActiveStudents(ctx, tenant.ID, activeSession.ID)
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to count students: %v", err)
+			response.Failed++
+			response.Results = append(response.Results, result)
+			continue
+		}
+
+		result.StudentCount = studentCount
+
+		if studentCount == 0 {
+			result.Skipped = true
+			result.SkipReason = "no enrolled students"
+			response.Skipped++
+			response.Results = append(response.Results, result)
+			continue
+		}
+
+		// Generate invoice
+		invoice, err := s.GenerateTermInvoice(
+			ctx,
+			tenant.ID,
+			activeSession.ID,
+			activeTerm.ID,
+			studentCount,
+			actorID,
+			domain.RoleSuperAdmin,
+			ipAddress,
+		)
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to generate invoice: %v", err)
+			response.Failed++
+			response.Results = append(response.Results, result)
+			continue
+		}
+
+		result.Invoice = invoice
+		response.InvoicesCreated++
+		response.Results = append(response.Results, result)
+	}
+
+	return response, nil
+}
+
+// getActiveSessionForTenant retrieves the active session for a tenant
+func (s *BillingService) getActiveSessionForTenant(ctx context.Context, tenantID uuid.UUID) (*domain.Session, error) {
+	// Use direct SQL query to get active session
+	query := `
+		SELECT id, tenant_id, label, start_year, end_year, status, created_at, updated_at
+		FROM sessions
+		WHERE tenant_id = $1 AND status = 'ACTIVE'
+		LIMIT 1
+	`
+
+	row := s.invoiceRepo.GetDB().QueryRowContext(ctx, query, tenantID)
+
+	var session domain.Session
+	err := row.Scan(
+		&session.ID,
+		&session.TenantID,
+		&session.Label,
+		&session.StartYear,
+		&session.EndYear,
+		&session.Status,
+		&session.CreatedAt,
+		&session.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &session, nil
+}
+
+// getActiveTermForSession retrieves the active term for a session
+func (s *BillingService) getActiveTermForSession(ctx context.Context, sessionID uuid.UUID) (*domain.Term, error) {
+	// Use direct SQL query to get active term
+	query := `
+		SELECT id, tenant_id, session_id, ordinal, start_date, end_date, status, created_at, updated_at
+		FROM terms
+		WHERE session_id = $1 AND status = 'ACTIVE'
+		LIMIT 1
+	`
+
+	row := s.invoiceRepo.GetDB().QueryRowContext(ctx, query, sessionID)
+
+	var term domain.Term
+	err := row.Scan(
+		&term.ID,
+		&term.TenantID,
+		&term.SessionID,
+		&term.Ordinal,
+		&term.StartDate,
+		&term.EndDate,
+		&term.Status,
+		&term.CreatedAt,
+		&term.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &term, nil
+}
