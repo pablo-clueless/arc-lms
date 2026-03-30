@@ -456,7 +456,7 @@ func (h *BillingHandler) GetBillingMetrics(c *gin.Context) {
 
 	metrics, err := h.billingService.GetBillingMetrics(c.Request.Context())
 	if err != nil {
-		errors.InternalError(c, "failed to get billing metrics")
+		errors.InternalError(c, err.Error())
 		return
 	}
 

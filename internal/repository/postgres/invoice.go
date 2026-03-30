@@ -53,7 +53,7 @@ func (r *InvoiceRepository) GetBillingMetrics(ctx context.Context) (*BillingMetr
 	// Calculate MRR (Monthly Recurring Revenue)
 	// MRR = (Total revenue from last 12 months) / 12
 	mrrQuery := `
-		SELECT COALESCE(SUM(total_amount), 0) / 12
+		SELECT COALESCE(SUM(total_amount) / 12, 0)::bigint
 		FROM invoices
 		WHERE status = 'PAID'
 			AND paid_at >= NOW() - INTERVAL '12 months'

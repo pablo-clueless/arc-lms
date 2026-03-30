@@ -3,7 +3,9 @@ package handler
 import (
 	"net/http"
 
+	"arc-lms/internal/domain"
 	"arc-lms/internal/pkg/errors"
+	"arc-lms/internal/pkg/validator"
 	"arc-lms/internal/repository"
 	"arc-lms/internal/service"
 
@@ -327,4 +329,62 @@ func (h *NotificationHandler) DeleteNotification(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "notification deleted",
 	})
+}
+
+// BroadcastNotification godoc
+// @Summary Broadcast notification
+// @Description Send a notification to multiple users based on scope (Admin/SuperAdmin only)
+// @Tags Notifications
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body service.BroadcastNotificationRequest true "Broadcast data"
+// @Success 200 {object} service.BroadcastNotificationResponse
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 401 {object} errors.ErrorResponse
+// @Failure 403 {object} errors.ErrorResponse
+// @Router /notifications/broadcast [post]
+func (h *NotificationHandler) BroadcastNotification(c *gin.Context) {
+	// Get tenant ID from context
+	tenantIDValue, exists := c.Get("tenant_id")
+	if !exists {
+		errors.BadRequest(c, "tenant context required", nil)
+		return
+	}
+
+	tenantID, ok := tenantIDValue.(uuid.UUID)
+	if !ok {
+		errors.BadRequest(c, "invalid tenant ID format", nil)
+		return
+	}
+
+	// Get role from context - only ADMIN and SUPER_ADMIN can broadcast
+	role, ok := GetRoleFromContext(c)
+	if !ok {
+		errors.Unauthorized(c, "role not found in context")
+		return
+	}
+
+	if role != domain.RoleAdmin && role != domain.RoleSuperAdmin {
+		errors.Forbidden(c, "only admins can broadcast notifications")
+		return
+	}
+
+	// Parse and validate request
+	var req service.BroadcastNotificationRequest
+	if !validator.BindAndValidate(c, &req) {
+		return
+	}
+
+	// Broadcast notification
+	response, err := h.notificationService.BroadcastNotification(c.Request.Context(), tenantID, &req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "broadcast failed",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
 }

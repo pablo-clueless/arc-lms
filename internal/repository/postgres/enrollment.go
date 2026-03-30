@@ -585,3 +585,38 @@ func (r *EnrollmentRepository) CountActiveStudents(ctx context.Context, tenantID
 
 	return count, nil
 }
+
+// GetActiveByStudent retrieves the active enrollment for a student in a given session
+func (r *EnrollmentRepository) GetActiveByStudent(ctx context.Context, studentID uuid.UUID, sessionID uuid.UUID) (*domain.Enrollment, error) {
+	query := `
+		SELECT
+			id, tenant_id, student_id, class_id, session_id,
+			status, enrollment_date, withdrawal_date, withdrawal_reason,
+			transferred_to_class_id, transfer_date, transfer_reason,
+			suspension_date, suspension_reason, notes,
+			created_at, updated_at
+		FROM enrollments
+		WHERE student_id = $1 AND session_id = $2 AND status = $3
+	`
+
+	return r.scanEnrollment(r.GetDB().QueryRowContext(ctx, query, studentID, sessionID, domain.EnrollmentStatusActive))
+}
+
+// GetCurrentByStudent retrieves the most recent enrollment for a student (active session)
+func (r *EnrollmentRepository) GetCurrentByStudent(ctx context.Context, studentID uuid.UUID, tenantID uuid.UUID) (*domain.Enrollment, error) {
+	query := `
+		SELECT
+			e.id, e.tenant_id, e.student_id, e.class_id, e.session_id,
+			e.status, e.enrollment_date, e.withdrawal_date, e.withdrawal_reason,
+			e.transferred_to_class_id, e.transfer_date, e.transfer_reason,
+			e.suspension_date, e.suspension_reason, e.notes,
+			e.created_at, e.updated_at
+		FROM enrollments e
+		INNER JOIN sessions s ON e.session_id = s.id
+		WHERE e.student_id = $1 AND e.tenant_id = $2 AND s.status = 'ACTIVE'
+		ORDER BY e.created_at DESC
+		LIMIT 1
+	`
+
+	return r.scanEnrollment(r.GetDB().QueryRowContext(ctx, query, studentID, tenantID))
+}

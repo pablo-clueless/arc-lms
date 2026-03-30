@@ -347,3 +347,208 @@ func (s *NotificationService) NotifyMeetingScheduled(
 		&meetingID,
 	)
 }
+
+// BroadcastNotificationRequest represents a request to broadcast a notification
+type BroadcastNotificationRequest struct {
+	Title           string                       `json:"title" validate:"required,min=3,max=200"`
+	Body            string                       `json:"body" validate:"required,min=3,max=1000"`
+	RecipientScope  domain.RecipientScope        `json:"recipient_scope" validate:"required,oneof=ALL_USERS ALL_TUTORS ALL_STUDENTS CLASS COURSE SPECIFIC_USERS"`
+	TargetClassID   *uuid.UUID                   `json:"target_class_id,omitempty"`
+	TargetCourseID  *uuid.UUID                   `json:"target_course_id,omitempty"`
+	SpecificUserIDs []uuid.UUID                  `json:"specific_user_ids,omitempty"`
+	Channels        []domain.NotificationChannel `json:"channels" validate:"required,min=1"`
+	Priority        domain.NotificationPriority  `json:"priority" validate:"required,oneof=LOW NORMAL HIGH URGENT"`
+	ActionURL       *string                      `json:"action_url,omitempty"`
+}
+
+// BroadcastNotificationResponse represents the response from a broadcast
+type BroadcastNotificationResponse struct {
+	TotalRecipients int    `json:"total_recipients"`
+	SuccessCount    int    `json:"success_count"`
+	FailureCount    int    `json:"failure_count"`
+	Status          string `json:"status"` // "queued", "completed", "failed"
+}
+
+// BroadcastNotification sends a notification to multiple users based on scope
+// For large recipient lists, processing happens in the background
+func (s *NotificationService) BroadcastNotification(
+	ctx context.Context,
+	tenantID uuid.UUID,
+	req *BroadcastNotificationRequest,
+) (*BroadcastNotificationResponse, error) {
+	// Resolve recipient user IDs based on scope
+	userIDs, err := s.resolveRecipients(ctx, tenantID, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve recipients: %w", err)
+	}
+
+	if len(userIDs) == 0 {
+		return &BroadcastNotificationResponse{
+			TotalRecipients: 0,
+			SuccessCount:    0,
+			FailureCount:    0,
+			Status:          "completed",
+		}, nil
+	}
+
+	// For small batches (≤500), process synchronously
+	if len(userIDs) <= 500 {
+		err = s.SendNotificationToUsers(
+			ctx,
+			tenantID,
+			userIDs,
+			domain.NotificationEventCustom,
+			req.Title,
+			req.Body,
+			req.Channels,
+			req.Priority,
+			req.ActionURL,
+			nil,
+			nil,
+		)
+
+		if err != nil {
+			return &BroadcastNotificationResponse{
+				TotalRecipients: len(userIDs),
+				SuccessCount:    0,
+				FailureCount:    len(userIDs),
+				Status:          "failed",
+			}, err
+		}
+
+		return &BroadcastNotificationResponse{
+			TotalRecipients: len(userIDs),
+			SuccessCount:    len(userIDs),
+			FailureCount:    0,
+			Status:          "completed",
+		}, nil
+	}
+
+	// For large batches, process in background
+	go s.processBroadcastInBatches(tenantID, userIDs, req)
+
+	return &BroadcastNotificationResponse{
+		TotalRecipients: len(userIDs),
+		SuccessCount:    0,
+		FailureCount:    0,
+		Status:          "queued",
+	}, nil
+}
+
+// processBroadcastInBatches processes notifications in smaller batches to avoid timeouts
+func (s *NotificationService) processBroadcastInBatches(
+	tenantID uuid.UUID,
+	userIDs []uuid.UUID,
+	req *BroadcastNotificationRequest,
+) {
+	const batchSize = 100
+	ctx := context.Background()
+
+	for i := 0; i < len(userIDs); i += batchSize {
+		end := i + batchSize
+		if end > len(userIDs) {
+			end = len(userIDs)
+		}
+
+		batch := userIDs[i:end]
+
+		err := s.SendNotificationToUsers(
+			ctx,
+			tenantID,
+			batch,
+			domain.NotificationEventCustom,
+			req.Title,
+			req.Body,
+			req.Channels,
+			req.Priority,
+			req.ActionURL,
+			nil,
+			nil,
+		)
+		if err != nil {
+			// Log error but continue with next batch
+			fmt.Printf("Failed to send notification batch %d-%d: %v\n", i, end, err)
+		}
+
+		// Small delay between batches to reduce database load
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// resolveRecipients resolves user IDs based on the recipient scope
+func (s *NotificationService) resolveRecipients(
+	ctx context.Context,
+	tenantID uuid.UUID,
+	req *BroadcastNotificationRequest,
+) ([]uuid.UUID, error) {
+	switch req.RecipientScope {
+	case domain.RecipientScopeAllUsers:
+		return s.getUserIDsByFilter(ctx, tenantID, nil, nil)
+
+	case domain.RecipientScopeAllTutors:
+		role := domain.RoleTutor
+		return s.getUserIDsByFilter(ctx, tenantID, &role, nil)
+
+	case domain.RecipientScopeAllStudents:
+		role := domain.RoleStudent
+		return s.getUserIDsByFilter(ctx, tenantID, &role, nil)
+
+	case domain.RecipientScopeClass:
+		if req.TargetClassID == nil {
+			return nil, fmt.Errorf("target_class_id is required for CLASS scope")
+		}
+		return s.getUserIDsByFilter(ctx, tenantID, nil, req.TargetClassID)
+
+	case domain.RecipientScopeCourse:
+		if req.TargetCourseID == nil {
+			return nil, fmt.Errorf("target_course_id is required for COURSE scope")
+		}
+		// For course scope, we need to get students enrolled in the course
+		// This would require enrollment repository - for now return error
+		return nil, fmt.Errorf("COURSE scope not yet implemented")
+
+	case domain.RecipientScopeSpecific:
+		if len(req.SpecificUserIDs) == 0 {
+			return nil, fmt.Errorf("specific_user_ids is required for SPECIFIC_USERS scope")
+		}
+		return req.SpecificUserIDs, nil
+
+	default:
+		return nil, fmt.Errorf("unknown recipient scope: %s", req.RecipientScope)
+	}
+}
+
+// getUserIDsByFilter retrieves user IDs based on filters
+func (s *NotificationService) getUserIDsByFilter(
+	ctx context.Context,
+	tenantID uuid.UUID,
+	role *domain.Role,
+	classID *uuid.UUID,
+) ([]uuid.UUID, error) {
+	// Only include ACTIVE users for notifications
+	activeStatus := domain.UserStatusActive
+	filters := &postgres.UserListFilters{
+		TenantID: &tenantID,
+		Role:     role,
+		ClassID:  classID,
+		Status:   &activeStatus,
+	}
+
+	// Use a large limit to get all users
+	params := repository.PaginationParams{
+		Page:  1,
+		Limit: 10000,
+	}
+
+	users, _, err := s.userRepo.List(ctx, filters, params)
+	if err != nil {
+		return nil, err
+	}
+
+	userIDs := make([]uuid.UUID, len(users))
+	for i, user := range users {
+		userIDs[i] = user.ID
+	}
+
+	return userIDs, nil
+}

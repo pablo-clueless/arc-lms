@@ -407,8 +407,32 @@ func (s *TimetableService) generatePeriods(
 	var periods []*domain.Period
 	now := time.Now()
 
-	// Track tutor schedules to avoid conflicts
-	tutorSchedule := make(map[uuid.UUID]map[domain.DayOfWeek][]int) // tutor -> day -> period numbers
+	// Track tutor schedules to avoid conflicts (tutor -> day -> list of time ranges as [start_minutes, end_minutes])
+	tutorSchedule := make(map[uuid.UUID]map[domain.DayOfWeek][][2]int)
+
+	// Load existing tutor schedules from other timetables in this term
+	// This prevents the exclusion constraint violation when a tutor teaches multiple classes
+	for _, course := range courses {
+		if tutorSchedule[course.AssignedTutorID] == nil {
+			tutorSchedule[course.AssignedTutorID] = make(map[domain.DayOfWeek][][2]int)
+
+			// Get existing periods for this tutor in the term
+			existingPeriods, err := s.periodRepo.ListByTutor(ctx, course.AssignedTutorID, timetable.TermID)
+			if err != nil {
+				// If error, continue without pre-loading (constraint will catch conflicts)
+				continue
+			}
+
+			for _, ep := range existingPeriods {
+				startMinutes := ep.StartTime.Hour()*60 + ep.StartTime.Minute()
+				endMinutes := ep.EndTime.Hour()*60 + ep.EndTime.Minute()
+				tutorSchedule[course.AssignedTutorID][ep.DayOfWeek] = append(
+					tutorSchedule[course.AssignedTutorID][ep.DayOfWeek],
+					[2]int{startMinutes, endMinutes},
+				)
+			}
+		}
+	}
 
 	// Track course periods per week
 	coursePeriodCount := make(map[uuid.UUID]int)
@@ -425,10 +449,10 @@ func (s *TimetableService) generatePeriods(
 		return courses[i].AssignedTutorID.String() < courses[j].AssignedTutorID.String()
 	})
 
-	periodNumber := 1
 	for _, day := range config.InstructionalDays {
-		periodNumber = 1
+		periodNumber := 1
 		for periodNumber <= config.DailyPeriodLimit {
+			scheduled := false
 			for _, course := range courses {
 				// Check if we've reached the max periods for this course
 				maxPeriods := periodsPerCourse
@@ -439,16 +463,21 @@ func (s *TimetableService) generatePeriods(
 					continue
 				}
 
-				// Check if tutor is available
+				// Calculate start and end times for this period
+				startTime := s.calculatePeriodTime(config.StartTime, periodNumber, config.PeriodDuration, config.BreakAfterPeriod, config.BreakDuration)
+				endTime := startTime.Add(time.Duration(config.PeriodDuration) * time.Minute)
+				startMinutes := startTime.Hour()*60 + startTime.Minute()
+				endMinutes := endTime.Hour()*60 + endTime.Minute()
+
+				// Check if tutor is available (no overlapping periods)
 				if tutorSchedule[course.AssignedTutorID] == nil {
-					tutorSchedule[course.AssignedTutorID] = make(map[domain.DayOfWeek][]int)
+					tutorSchedule[course.AssignedTutorID] = make(map[domain.DayOfWeek][][2]int)
 				}
 
-				// Check for tutor conflict on this day/period
-				tutorPeriods := tutorSchedule[course.AssignedTutorID][day]
 				hasConflict := false
-				for _, p := range tutorPeriods {
-					if p == periodNumber {
+				for _, slot := range tutorSchedule[course.AssignedTutorID][day] {
+					// Check for overlap: periods overlap if start1 < end2 AND start2 < end1
+					if startMinutes < slot[1] && slot[0] < endMinutes {
 						hasConflict = true
 						break
 					}
@@ -457,10 +486,6 @@ func (s *TimetableService) generatePeriods(
 				if hasConflict {
 					continue
 				}
-
-				// Calculate start and end times
-				startTime := s.calculatePeriodTime(config.StartTime, periodNumber, config.PeriodDuration, config.BreakAfterPeriod, config.BreakDuration)
-				endTime := startTime.Add(time.Duration(config.PeriodDuration) * time.Minute)
 
 				period := &domain.Period{
 					ID:           uuid.New(),
@@ -479,15 +504,20 @@ func (s *TimetableService) generatePeriods(
 
 				periods = append(periods, period)
 				coursePeriodCount[course.ID]++
-				tutorSchedule[course.AssignedTutorID][day] = append(tutorSchedule[course.AssignedTutorID][day], periodNumber)
+				tutorSchedule[course.AssignedTutorID][day] = append(
+					tutorSchedule[course.AssignedTutorID][day],
+					[2]int{startMinutes, endMinutes},
+				)
 
+				scheduled = true
 				periodNumber++
 				if periodNumber > config.DailyPeriodLimit {
 					break
 				}
 			}
 
-			if periodNumber <= config.DailyPeriodLimit {
+			// If no course was scheduled for this period, move to next
+			if !scheduled {
 				periodNumber++
 			}
 		}
@@ -627,23 +657,37 @@ func (s *TimetableService) GetTimetable(ctx context.Context, id uuid.UUID) (*Tim
 	}, nil
 }
 
-// GetTimetableByClassAndTerm retrieves the published timetable for a class and term
-func (s *TimetableService) GetTimetableByClassAndTerm(ctx context.Context, classID, termID uuid.UUID) (*TimetableWithPeriods, error) {
-	timetable, err := s.timetableRepo.GetPublishedTimetable(ctx, classID, termID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get timetable: %w", err)
-	}
-
-	// Get class
+// GetClassTimetable retrieves the published timetable for a class
+// If termID is nil, it uses the active term for the class's session
+func (s *TimetableService) GetClassTimetable(ctx context.Context, classID uuid.UUID, termID *uuid.UUID) (*TimetableWithPeriods, error) {
+	// Get class first
 	class, err := s.classRepo.Get(ctx, classID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get class: %w", err)
 	}
 
+	// Resolve term ID
+	var resolvedTermID uuid.UUID
+	if termID != nil {
+		resolvedTermID = *termID
+	} else {
+		// Get active term for the class's session
+		activeTerm, err := s.termRepo.GetActiveTerm(ctx, class.SessionID)
+		if err != nil {
+			return nil, fmt.Errorf("no active term found for this class's session: %w", err)
+		}
+		resolvedTermID = activeTerm.ID
+	}
+
 	// Get term
-	term, err := s.termRepo.Get(ctx, termID)
+	term, err := s.termRepo.Get(ctx, resolvedTermID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get term: %w", err)
+	}
+
+	timetable, err := s.timetableRepo.GetPublishedTimetable(ctx, classID, resolvedTermID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get timetable: %w", err)
 	}
 
 	periods, err := s.periodRepo.ListByTimetable(ctx, timetable.ID)
@@ -674,6 +718,12 @@ func (s *TimetableService) GetTimetableByClassAndTerm(ctx context.Context, class
 		ArchivedAt:        timetable.ArchivedAt,
 		Periods:           enrichedPeriods,
 	}, nil
+}
+
+// GetTimetableByClassAndTerm retrieves the published timetable for a class and term
+// Deprecated: Use GetClassTimetable instead
+func (s *TimetableService) GetTimetableByClassAndTerm(ctx context.Context, classID, termID uuid.UUID) (*TimetableWithPeriods, error) {
+	return s.GetClassTimetable(ctx, classID, &termID)
 }
 
 // ListTimetables lists timetables for a class or term with full class and term objects

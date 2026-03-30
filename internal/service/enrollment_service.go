@@ -497,3 +497,55 @@ func (s *EnrollmentService) CountActiveStudents(
 	}
 	return count, nil
 }
+
+// StudentEnrollmentResponse contains enrollment with enriched class and session information
+type StudentEnrollmentResponse struct {
+	Enrollment *domain.Enrollment `json:"enrollment"`
+	Class      *domain.Class      `json:"class"`
+	Session    *domain.Session    `json:"session"`
+}
+
+// GetStudentCurrentEnrollment gets the current enrollment for a student in the active session
+func (s *EnrollmentService) GetStudentCurrentEnrollment(
+	ctx context.Context,
+	tenantID uuid.UUID,
+	studentID uuid.UUID,
+) (*StudentEnrollmentResponse, error) {
+	// Verify student exists and belongs to tenant
+	student, err := s.userRepo.GetByID(ctx, studentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get student: %w", err)
+	}
+
+	if student.TenantID == nil || *student.TenantID != tenantID {
+		return nil, fmt.Errorf("student does not belong to this tenant")
+	}
+
+	if student.Role != domain.RoleStudent {
+		return nil, fmt.Errorf("user is not a student")
+	}
+
+	// Get current enrollment (in active session)
+	enrollment, err := s.enrollmentRepo.GetCurrentByStudent(ctx, studentID, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get enrollment: %w", err)
+	}
+
+	// Get class details
+	class, err := s.classRepo.Get(ctx, enrollment.ClassID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get class: %w", err)
+	}
+
+	// Get session details
+	session, err := s.sessionRepo.Get(ctx, enrollment.SessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session: %w", err)
+	}
+
+	return &StudentEnrollmentResponse{
+		Enrollment: enrollment,
+		Class:      class,
+		Session:    session,
+	}, nil
+}

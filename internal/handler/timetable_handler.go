@@ -283,13 +283,13 @@ func (h *TimetableHandler) GetTutorTimetable(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": periods})
 }
 
-// GetClassTimetable retrieves the published timetable for a class and term
+// GetClassTimetable retrieves the published timetable for a class
 // @Summary Get class timetable
-// @Description Retrieves the published timetable for a class in a term
+// @Description Retrieves the published timetable for a class. If term_id is not provided, uses the active term.
 // @Tags timetables
 // @Produce json
 // @Param class_id path string true "Class ID"
-// @Param term_id query string true "Term ID"
+// @Param term_id query string false "Term ID (optional - defaults to active term)"
 // @Success 200 {object} service.TimetableWithPeriods
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
@@ -303,19 +303,17 @@ func (h *TimetableHandler) GetClassTimetable(c *gin.Context) {
 		return
 	}
 
-	termIDStr := c.Query("term_id")
-	if termIDStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "term_id is required"})
-		return
+	var termID *uuid.UUID
+	if termIDStr := c.Query("term_id"); termIDStr != "" {
+		parsedTermID, err := uuid.Parse(termIDStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid term_id"})
+			return
+		}
+		termID = &parsedTermID
 	}
 
-	termID, err := uuid.Parse(termIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid term_id"})
-		return
-	}
-
-	timetable, err := h.timetableService.GetTimetableByClassAndTerm(c.Request.Context(), classID, termID)
+	timetable, err := h.timetableService.GetClassTimetable(c.Request.Context(), classID, termID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return

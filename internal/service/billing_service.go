@@ -455,16 +455,7 @@ func (s *BillingService) ListBillingAdjustments(
 func (s *BillingService) GetBillingMetrics(ctx context.Context) (*postgres.BillingMetrics, error) {
 	metrics, err := s.invoiceRepo.GetBillingMetrics(ctx)
 	if err != nil {
-		// Return default metrics with zeros if there's an error (e.g., no invoices table yet)
-		return &postgres.BillingMetrics{
-			TotalRevenue:     0,
-			MRR:              0,
-			UpcomingPayments: 0,
-			LatePayments:     0,
-			UpcomingCount:    0,
-			LateCount:        0,
-			RecentInvoices:   make([]*domain.Invoice, 0),
-		}, nil
+		return nil, fmt.Errorf("failed to get billing metrics: %w", err)
 	}
 	// Ensure RecentInvoices is never null
 	if metrics.RecentInvoices == nil {

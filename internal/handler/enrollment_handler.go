@@ -306,3 +306,37 @@ func (h *EnrollmentHandler) ReactivateEnrollment(c *gin.Context) {
 
 	c.JSON(http.StatusOK, enrollment)
 }
+
+// GetStudentEnrollment godoc
+// @Summary Get student's current enrollment
+// @Description Get the current enrollment and class for a student in the active session
+// @Tags Enrollments
+// @Security BearerAuth
+// @Produce json
+// @Param student_id path string true "Student ID"
+// @Success 200 {object} service.StudentEnrollmentResponse
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 404 {object} errors.ErrorResponse
+// @Router /enrollments/student/{student_id} [get]
+func (h *EnrollmentHandler) GetStudentEnrollment(c *gin.Context) {
+	tenantIDValue, exists := c.Get("tenant_id")
+	if !exists {
+		errors.Forbidden(c, "tenant context required")
+		return
+	}
+	tenantID, _ := tenantIDValue.(uuid.UUID)
+
+	studentID, err := uuid.Parse(c.Param("student_id"))
+	if err != nil {
+		errors.BadRequest(c, "invalid student ID", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	response, err := h.enrollmentService.GetStudentCurrentEnrollment(c.Request.Context(), tenantID, studentID)
+	if err != nil {
+		errors.NotFound(c, err.Error())
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
+}

@@ -34,11 +34,12 @@ func NewUserService(
 
 // UpdateUserRequest represents user update data
 type UpdateUserRequest struct {
-	FirstName  *string `json:"first_name,omitempty" validate:"omitempty,min=1,max=100"`
-	LastName   *string `json:"last_name,omitempty" validate:"omitempty,min=1,max=100"`
-	MiddleName *string `json:"middle_name,omitempty" validate:"omitempty,max=100"`
-	Phone      *string `json:"phone,omitempty" validate:"omitempty,min=10,max=20"`
-	ProfilePhoto *string `json:"profile_photo,omitempty" validate:"omitempty,url"`
+	FirstName               *string                         `json:"first_name,omitempty" validate:"omitempty,min=1,max=100"`
+	LastName                *string                         `json:"last_name,omitempty" validate:"omitempty,min=1,max=100"`
+	MiddleName              *string                         `json:"middle_name,omitempty" validate:"omitempty,max=100"`
+	Phone                   *string                         `json:"phone,omitempty" validate:"omitempty,min=10,max=20"`
+	ProfilePhoto            *string                         `json:"profile_photo,omitempty" validate:"omitempty,url"`
+	NotificationPreferences []domain.NotificationPreference `json:"notification_preferences,omitempty"`
 }
 
 // InviteUserRequest represents user invitation data
@@ -137,6 +138,9 @@ func (s *UserService) UpdateUser(
 	}
 	if req.ProfilePhoto != nil {
 		user.ProfilePhoto = req.ProfilePhoto
+	}
+	if len(req.NotificationPreferences) > 0 {
+		user.NotificationPreferences = req.NotificationPreferences
 	}
 	user.UpdatedAt = time.Now()
 
