@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"arc-lms/internal/domain"
 	"arc-lms/internal/repository"
 )
@@ -219,6 +220,102 @@ func (r *PeriodRepository) ListByTutor(ctx context.Context, tutorID uuid.UUID, t
 	`
 
 	return r.queryPeriods(ctx, query, tutorID, termID, domain.TimetableStatusPublished)
+}
+
+// ListAllActivePeriodsByTutor retrieves all periods for a tutor from non-archived timetables
+// This is used for conflict detection during timetable generation
+func (r *PeriodRepository) ListAllActivePeriodsByTutor(ctx context.Context, tutorID uuid.UUID, tenantID uuid.UUID, tx *sql.Tx) ([]*domain.Period, error) {
+	query := `
+		SELECT
+			p.id, p.tenant_id, p.timetable_id, p.course_id, p.tutor_id, p.class_id,
+			p.day_of_week, p.start_time, p.end_time, p.period_number, p.notes,
+			p.created_at, p.updated_at
+		FROM periods p
+		JOIN timetables t ON p.timetable_id = t.id
+		WHERE p.tutor_id = $1 AND p.tenant_id = $2 AND t.status IN ($3, $4)
+		ORDER BY p.day_of_week, p.period_number
+	`
+
+	return r.queryPeriodsWithTx(ctx, query, tx, tutorID, tenantID, domain.TimetableStatusDraft, domain.TimetableStatusPublished)
+}
+
+// ListAllActivePeriodsByTutors retrieves all periods for multiple tutors from non-archived timetables
+// This is optimized for conflict detection during timetable generation
+func (r *PeriodRepository) ListAllActivePeriodsByTutors(ctx context.Context, tutorIDs []uuid.UUID, tenantID uuid.UUID, tx *sql.Tx) ([]*domain.Period, error) {
+	if len(tutorIDs) == 0 {
+		return []*domain.Period{}, nil
+	}
+
+	// Convert UUIDs to strings for pq.Array compatibility
+	tutorIDStrings := make([]string, len(tutorIDs))
+	for i, id := range tutorIDs {
+		tutorIDStrings[i] = id.String()
+	}
+
+	query := `
+		SELECT
+			p.id, p.tenant_id, p.timetable_id, p.course_id, p.tutor_id, p.class_id,
+			p.day_of_week, p.start_time, p.end_time, p.period_number, p.notes,
+			p.created_at, p.updated_at
+		FROM periods p
+		JOIN timetables t ON p.timetable_id = t.id
+		WHERE p.tutor_id = ANY($1::uuid[]) AND p.tenant_id = $2 AND t.status IN ($3, $4)
+		ORDER BY p.tutor_id, p.day_of_week, p.period_number
+	`
+
+	return r.queryPeriodsWithTx(ctx, query, tx, pq.Array(tutorIDStrings), tenantID, domain.TimetableStatusDraft, domain.TimetableStatusPublished)
+}
+
+// queryPeriodsWithTx executes a query with optional transaction and returns a list of periods
+func (r *PeriodRepository) queryPeriodsWithTx(ctx context.Context, query string, tx *sql.Tx, args ...interface{}) ([]*domain.Period, error) {
+	var rows *sql.Rows
+	var err error
+
+	if tx != nil {
+		rows, err = tx.QueryContext(ctx, query, args...)
+	} else {
+		rows, err = r.GetDB().QueryContext(ctx, query, args...)
+	}
+
+	if err != nil {
+		return nil, repository.ParseError(err)
+	}
+	defer rows.Close()
+
+	periods := make([]*domain.Period, 0)
+	for rows.Next() {
+		var period domain.Period
+		var notes sql.NullString
+
+		err := rows.Scan(
+			&period.ID,
+			&period.TenantID,
+			&period.TimetableID,
+			&period.CourseID,
+			&period.TutorID,
+			&period.ClassID,
+			&period.DayOfWeek,
+			&period.StartTime,
+			&period.EndTime,
+			&period.PeriodNumber,
+			&notes,
+			&period.CreatedAt,
+			&period.UpdatedAt,
+		)
+
+		if err != nil {
+			return nil, repository.ParseError(err)
+		}
+
+		period.Notes = repository.FromNullString(notes)
+		periods = append(periods, &period)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, repository.ParseError(err)
+	}
+
+	return periods, nil
 }
 
 // ListByClass retrieves all periods for a class within a timetable

@@ -89,6 +89,7 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 	termRepo := postgres.NewTermRepository(cfg.DB)
 	classRepo := postgres.NewClassRepository(cfg.DB)
 	courseRepo := postgres.NewCourseRepository(cfg.DB)
+	courseContentRepo := postgres.NewCourseContentRepository(cfg.DB)
 	enrollmentRepo := postgres.NewEnrollmentRepository(cfg.DB)
 	timetableRepo := postgres.NewTimetableRepository(cfg.DB)
 	periodRepo := postgres.NewPeriodRepository(cfg.DB)
@@ -104,6 +105,7 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 	communicationRepo := postgres.NewCommunicationRepository(cfg.DB)
 	subscriptionRepo := postgres.NewSubscriptionRepository(cfg.DB)
 	systemConfigRepo := postgres.NewSystemConfigRepository(cfg.DB)
+	guardianRepo := postgres.NewGuardianRepository(cfg.DB)
 
 	auditService := service.NewAuditService(auditRepo)
 	billingService := service.NewBillingService(invoiceRepo, subscriptionRepo, tenantRepo, enrollmentRepo, auditService)
@@ -113,9 +115,9 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 	sessionService := service.NewSessionService(sessionRepo, auditService)
 	termService := service.NewTermService(termRepo, sessionRepo, enrollmentRepo, auditService, billingService)
 	classService := service.NewClassService(classRepo, sessionRepo, auditService)
-	courseService := service.NewCourseService(courseRepo, classRepo, userRepo, auditService)
+	courseService := service.NewCourseService(courseRepo, courseContentRepo, classRepo, userRepo, auditService)
 	enrollmentService := service.NewEnrollmentService(enrollmentRepo, classRepo, userRepo, sessionRepo, termRepo, auditService)
-	dashboardService := service.NewDashboardService(tenantRepo, userRepo, sessionRepo, classRepo, courseRepo, enrollmentRepo, invoiceRepo)
+	dashboardService := service.NewDashboardService(tenantRepo, userRepo, sessionRepo, classRepo, courseRepo, enrollmentRepo, invoiceRepo, guardianRepo, progressRepo)
 	notificationService := service.NewNotificationService(notificationRepo, userRepo, wsHub)
 	assessmentService := service.NewAssessmentService(quizRepo, assignmentRepo, courseRepo, auditService)
 	timetableService := service.NewTimetableService(
@@ -158,6 +160,16 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 		auditService,
 	)
 	systemConfigService := service.NewSystemConfigService(systemConfigRepo, auditService)
+	guardianService := service.NewGuardianService(
+		guardianRepo,
+		userRepo,
+		enrollmentRepo,
+		classRepo,
+		sessionRepo,
+		progressRepo,
+		invoiceRepo,
+		auditService,
+	)
 
 	authHandler := handler.NewAuthHandler(authService)
 	userHandler := handler.NewUserHandler(userService)
@@ -179,6 +191,7 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 	pdfService := service.NewPDFService("templates")
 	billingHandler := handler.NewBillingHandler(billingService, pdfService, tenantRepo)
 	systemConfigHandler := handler.NewSystemConfigHandler(systemConfigService)
+	guardianHandler := handler.NewGuardianHandler(guardianService)
 	wsHandler := handler.NewWebSocketHandler(wsHub, cfg.JWTManager, nil)
 
 	router.GET("/ws", wsHandler.HandleConnection)
@@ -288,9 +301,21 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 				courses.GET("", courseHandler.ListCourses)
 				courses.POST("", courseHandler.CreateCourse)
 				courses.GET("/:id", courseHandler.GetCourse)
+				courses.GET("/:id/full", courseHandler.GetCourseWithContents)
 				courses.PUT("/:id", courseHandler.UpdateCourse)
 				courses.DELETE("/:id", courseHandler.DeleteCourse)
 				courses.POST("/:id/reassign-tutor", courseHandler.ReassignTutor)
+
+				// Course content routes
+				contents := courses.Group("/:id/contents")
+				{
+					contents.GET("", courseHandler.ListContents)
+					contents.POST("", courseHandler.CreateContent)
+					contents.POST("/reorder", courseHandler.ReorderContents)
+					contents.GET("/:content_id", courseHandler.GetContent)
+					contents.PUT("/:content_id", courseHandler.UpdateContent)
+					contents.DELETE("/:content_id", courseHandler.DeleteContent)
+				}
 
 				quizzes := courses.Group("/:id/quizzes")
 				{
@@ -492,6 +517,22 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 				// Statistics and metrics
 				billing.GET("/metrics", billingHandler.GetBillingMetrics)
 				billing.GET("/stats", billingHandler.GetTenantBillingStats)
+			}
+
+			// Guardian routes (for parent-student relationships)
+			guardians := protected.Group("/guardians")
+			{
+				// Parent endpoints (for logged-in parents)
+				guardians.GET("/my-wards", guardianHandler.GetMyWards)
+				guardians.GET("/wards/:student_id/progress", guardianHandler.GetWardProgress)
+				guardians.GET("/wards/:student_id/invoices", guardianHandler.GetWardInvoices)
+
+				// Admin endpoints (for managing guardian relationships)
+				guardians.GET("", guardianHandler.ListRelationships)
+				guardians.POST("/create-and-link", guardianHandler.CreateAndLinkGuardian)
+				guardians.POST("/:guardian_id/wards", guardianHandler.LinkWard)
+				guardians.DELETE("/:id", guardianHandler.UnlinkWard)
+				guardians.GET("/students/:student_id", guardianHandler.GetStudentGuardians)
 			}
 
 			audit := protected.Group("/audit")

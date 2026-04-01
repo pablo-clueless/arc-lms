@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -31,10 +32,10 @@ func NewTimetableHandler(timetableService *service.TimetableService) *TimetableH
 // @Produce json
 // @Param request body service.GenerateTimetableRequest true "Generate timetable request"
 // @Success 201 {object} service.TimetableWithPeriods
-// @Failure 400 {object} ErrorResponse
-// @Failure 401 {object} ErrorResponse
-// @Failure 403 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 401 {object} errors.ErrorResponse
+// @Failure 403 {object} errors.ErrorResponse
+// @Failure 500 {object} errors.ErrorResponse
 // @Router /timetables/generate [post]
 func (h *TimetableHandler) GenerateTimetable(c *gin.Context) {
 	var req service.GenerateTimetableRequest
@@ -61,6 +62,8 @@ func (h *TimetableHandler) GenerateTimetable(c *gin.Context) {
 		c.ClientIP(),
 	)
 	if err != nil {
+		// Log the full error for debugging
+		log.Printf("[ERROR] GenerateTimetable failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -75,9 +78,9 @@ func (h *TimetableHandler) GenerateTimetable(c *gin.Context) {
 // @Produce json
 // @Param id path string true "Timetable ID"
 // @Success 200 {object} service.TimetableWithPeriods
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 404 {object} errors.ErrorResponse
+// @Failure 500 {object} errors.ErrorResponse
 // @Router /timetables/{id} [get]
 func (h *TimetableHandler) GetTimetable(c *gin.Context) {
 	idStr := c.Param("id")
@@ -105,9 +108,9 @@ func (h *TimetableHandler) GetTimetable(c *gin.Context) {
 // @Param term_id query string false "Filter by term ID"
 // @Param cursor query string false "Pagination cursor"
 // @Param limit query int false "Number of items per page" default(20)
-// @Success 200 {object} PaginatedResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 500 {object} errors.ErrorResponse
 // @Router /timetables [get]
 func (h *TimetableHandler) ListTimetables(c *gin.Context) {
 	tenantID, exists := c.Get("tenant_id")
@@ -162,9 +165,9 @@ func (h *TimetableHandler) ListTimetables(c *gin.Context) {
 // @Produce json
 // @Param id path string true "Timetable ID"
 // @Success 200 {object} domain.Timetable
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 404 {object} errors.ErrorResponse
+// @Failure 500 {object} errors.ErrorResponse
 // @Router /timetables/{id}/publish [post]
 func (h *TimetableHandler) PublishTimetable(c *gin.Context) {
 	idStr := c.Param("id")
@@ -200,8 +203,8 @@ func (h *TimetableHandler) PublishTimetable(c *gin.Context) {
 // @Produce json
 // @Param request body regenerateTimetableRequest true "Regenerate request"
 // @Success 201 {object} service.TimetableWithPeriods
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 500 {object} errors.ErrorResponse
 // @Router /timetables/regenerate [post]
 func (h *TimetableHandler) RegenerateTimetable(c *gin.Context) {
 	var req regenerateTimetableRequest
@@ -251,8 +254,8 @@ type regenerateTimetableRequest struct {
 // @Param tutor_id path string true "Tutor ID"
 // @Param term_id query string true "Term ID"
 // @Success 200 {array} domain.Period
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 500 {object} errors.ErrorResponse
 // @Router /timetables/tutor/{tutor_id} [get]
 func (h *TimetableHandler) GetTutorTimetable(c *gin.Context) {
 	tutorIDStr := c.Param("tutor_id")
@@ -291,9 +294,9 @@ func (h *TimetableHandler) GetTutorTimetable(c *gin.Context) {
 // @Param class_id path string true "Class ID"
 // @Param term_id query string false "Term ID (optional - defaults to active term)"
 // @Success 200 {object} service.TimetableWithPeriods
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 404 {object} errors.ErrorResponse
+// @Failure 500 {object} errors.ErrorResponse
 // @Router /timetables/class/{class_id} [get]
 func (h *TimetableHandler) GetClassTimetable(c *gin.Context) {
 	classIDStr := c.Param("class_id")
@@ -330,8 +333,8 @@ func (h *TimetableHandler) GetClassTimetable(c *gin.Context) {
 // @Produce json
 // @Param request body service.SwapRequestInput true "Swap request"
 // @Success 201 {object} domain.SwapRequest
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 500 {object} errors.ErrorResponse
 // @Router /timetables/swap-requests [post]
 func (h *TimetableHandler) CreateSwapRequest(c *gin.Context) {
 	var req service.SwapRequestInput
@@ -372,8 +375,8 @@ func (h *TimetableHandler) CreateSwapRequest(c *gin.Context) {
 // @Produce json
 // @Param id path string true "Swap request ID"
 // @Success 200 {object} domain.SwapRequest
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 404 {object} errors.ErrorResponse
 // @Router /timetables/swap-requests/{id} [get]
 func (h *TimetableHandler) GetSwapRequest(c *gin.Context) {
 	idStr := c.Param("id")
@@ -401,9 +404,9 @@ func (h *TimetableHandler) GetSwapRequest(c *gin.Context) {
 // @Param status query string false "Filter by status"
 // @Param cursor query string false "Pagination cursor"
 // @Param limit query int false "Number of items per page" default(20)
-// @Success 200 {object} PaginatedResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 500 {object} errors.ErrorResponse
 // @Router /timetables/swap-requests [get]
 func (h *TimetableHandler) ListSwapRequests(c *gin.Context) {
 	tenantID, exists := c.Get("tenant_id")
@@ -455,8 +458,8 @@ func (h *TimetableHandler) ListSwapRequests(c *gin.Context) {
 // @Produce json
 // @Param cursor query string false "Pagination cursor"
 // @Param limit query int false "Number of items per page" default(20)
-// @Success 200 {object} PaginatedResponse
-// @Failure 500 {object} ErrorResponse
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} errors.ErrorResponse
 // @Router /timetables/swap-requests/pending [get]
 func (h *TimetableHandler) ListPendingSwapRequests(c *gin.Context) {
 	userID, _ := c.Get("user_id")
@@ -485,8 +488,8 @@ func (h *TimetableHandler) ListPendingSwapRequests(c *gin.Context) {
 // @Produce json
 // @Param cursor query string false "Pagination cursor"
 // @Param limit query int false "Number of items per page" default(20)
-// @Success 200 {object} PaginatedResponse
-// @Failure 500 {object} ErrorResponse
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} errors.ErrorResponse
 // @Router /timetables/swap-requests/escalated [get]
 func (h *TimetableHandler) ListEscalatedSwapRequests(c *gin.Context) {
 	tenantID, exists := c.Get("tenant_id")
@@ -520,9 +523,9 @@ func (h *TimetableHandler) ListEscalatedSwapRequests(c *gin.Context) {
 // @Produce json
 // @Param id path string true "Swap request ID"
 // @Success 200 {object} domain.SwapRequest
-// @Failure 400 {object} ErrorResponse
-// @Failure 403 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 403 {object} errors.ErrorResponse
+// @Failure 500 {object} errors.ErrorResponse
 // @Router /timetables/swap-requests/{id}/approve [post]
 func (h *TimetableHandler) ApproveSwapRequest(c *gin.Context) {
 	idStr := c.Param("id")
@@ -559,9 +562,9 @@ func (h *TimetableHandler) ApproveSwapRequest(c *gin.Context) {
 // @Param id path string true "Swap request ID"
 // @Param request body rejectSwapRequest true "Rejection reason"
 // @Success 200 {object} domain.SwapRequest
-// @Failure 400 {object} ErrorResponse
-// @Failure 403 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 403 {object} errors.ErrorResponse
+// @Failure 500 {object} errors.ErrorResponse
 // @Router /timetables/swap-requests/{id}/reject [post]
 func (h *TimetableHandler) RejectSwapRequest(c *gin.Context) {
 	idStr := c.Param("id")
@@ -609,9 +612,9 @@ type rejectSwapRequest struct {
 // @Param id path string true "Swap request ID"
 // @Param request body escalateSwapRequest true "Escalation reason"
 // @Success 200 {object} domain.SwapRequest
-// @Failure 400 {object} ErrorResponse
-// @Failure 403 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 403 {object} errors.ErrorResponse
+// @Failure 500 {object} errors.ErrorResponse
 // @Router /timetables/swap-requests/{id}/escalate [post]
 func (h *TimetableHandler) EscalateSwapRequest(c *gin.Context) {
 	idStr := c.Param("id")
@@ -659,9 +662,9 @@ type escalateSwapRequest struct {
 // @Param id path string true "Swap request ID"
 // @Param request body adminOverrideRequest true "Override reason"
 // @Success 200 {object} domain.SwapRequest
-// @Failure 400 {object} ErrorResponse
-// @Failure 403 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 403 {object} errors.ErrorResponse
+// @Failure 500 {object} errors.ErrorResponse
 // @Router /timetables/swap-requests/{id}/override [post]
 func (h *TimetableHandler) AdminOverrideSwapRequest(c *gin.Context) {
 	idStr := c.Param("id")
@@ -707,9 +710,9 @@ type adminOverrideRequest struct {
 // @Produce json
 // @Param id path string true "Swap request ID"
 // @Success 200 {object} domain.SwapRequest
-// @Failure 400 {object} ErrorResponse
-// @Failure 403 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Failure 400 {object} errors.ErrorResponse
+// @Failure 403 {object} errors.ErrorResponse
+// @Failure 500 {object} errors.ErrorResponse
 // @Router /timetables/swap-requests/{id}/cancel [post]
 func (h *TimetableHandler) CancelSwapRequest(c *gin.Context) {
 	idStr := c.Param("id")

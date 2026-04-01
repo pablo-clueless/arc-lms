@@ -845,3 +845,43 @@ func (r *InvoiceRepository) GetNextInvoiceNumber(ctx context.Context, tenantID u
 
 	return fmt.Sprintf("%s%04d", prefix, nextNum), nil
 }
+
+// ListByStudent retrieves invoices for a specific student
+// This queries invoices where the student is included in the line_items
+func (r *InvoiceRepository) ListByStudent(ctx context.Context, studentID uuid.UUID, params repository.PaginationParams) ([]*domain.Invoice, int, error) {
+	if err := repository.ValidatePaginationParams(&params); err != nil {
+		return nil, 0, err
+	}
+
+	// Query invoices that contain this student in line_items
+	whereClause := "WHERE line_items::text LIKE '%' || $1::text || '%'"
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM invoices %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, studentID.String()).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
+		SELECT
+			id, tenant_id, subscription_id, term_id, invoice_number,
+			status, currency, line_items, subtotal_amount, tax_amount,
+			discount_amount, total_amount, student_count, due_date,
+			issued_date, paid_at, payment_method, payment_reference,
+			notes, billing_email, pdf_url, created_at, updated_at,
+			disputed_at, dispute_reason, voided_at, void_reason
+		FROM invoices
+		%s
+		ORDER BY created_at %s
+		LIMIT $2 OFFSET $3
+	`, whereClause, params.SortOrder)
+
+	invoices, err := r.queryInvoices(ctx, query, studentID.String(), params.Limit, params.Offset())
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return invoices, total, nil
+}

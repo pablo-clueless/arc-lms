@@ -13,6 +13,7 @@ const (
 	RoleAdmin      Role = "ADMIN"
 	RoleTutor      Role = "TUTOR"
 	RoleStudent    Role = "STUDENT"
+	RoleParent     Role = "PARENT"
 )
 
 type UserStatus string

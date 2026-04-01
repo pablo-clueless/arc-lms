@@ -33,7 +33,7 @@ func NewSystemConfigService(
 // CreateSystemConfigRequest represents data for creating a new system config
 type CreateSystemConfigRequest struct {
 	Key         string                      `json:"key" validate:"required,min=1,max=100"`
-	Value       json.RawMessage             `json:"value" validate:"required"`
+	Value       json.RawMessage             `json:"value" validate:"required" swaggertype:"object"`
 	Description *string                     `json:"description,omitempty" validate:"omitempty,max=500"`
 	Category    domain.SystemConfigCategory `json:"category" validate:"required"`
 	IsSensitive bool                        `json:"is_sensitive"`
@@ -41,7 +41,7 @@ type CreateSystemConfigRequest struct {
 
 // UpdateSystemConfigRequest represents data for updating a system config
 type UpdateSystemConfigRequest struct {
-	Value       json.RawMessage              `json:"value,omitempty"`
+	Value       json.RawMessage              `json:"value,omitempty" swaggertype:"object"`
 	Description *string                      `json:"description,omitempty" validate:"omitempty,max=500"`
 	Category    *domain.SystemConfigCategory `json:"category,omitempty"`
 	IsSensitive *bool                        `json:"is_sensitive,omitempty"`
@@ -50,7 +50,7 @@ type UpdateSystemConfigRequest struct {
 // BulkUpdateConfigRequest represents a single config update in a bulk operation
 type BulkUpdateConfigRequest struct {
 	Key   string          `json:"key" validate:"required"`
-	Value json.RawMessage `json:"value" validate:"required"`
+	Value json.RawMessage `json:"value" validate:"required" swaggertype:"object"`
 }
 
 // SystemConfigFilters represents filters for listing configs

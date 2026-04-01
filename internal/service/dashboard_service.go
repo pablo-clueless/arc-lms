@@ -21,6 +21,8 @@ type DashboardService struct {
 	courseRepo     *postgres.CourseRepository
 	enrollmentRepo *postgres.EnrollmentRepository
 	invoiceRepo    *postgres.InvoiceRepository
+	guardianRepo   *postgres.GuardianRepository
+	progressRepo   *postgres.ProgressRepository
 }
 
 // NewDashboardService creates a new dashboard service
@@ -32,6 +34,8 @@ func NewDashboardService(
 	courseRepo *postgres.CourseRepository,
 	enrollmentRepo *postgres.EnrollmentRepository,
 	invoiceRepo *postgres.InvoiceRepository,
+	guardianRepo *postgres.GuardianRepository,
+	progressRepo *postgres.ProgressRepository,
 ) *DashboardService {
 	return &DashboardService{
 		tenantRepo:     tenantRepo,
@@ -41,6 +45,8 @@ func NewDashboardService(
 		courseRepo:     courseRepo,
 		enrollmentRepo: enrollmentRepo,
 		invoiceRepo:    invoiceRepo,
+		guardianRepo:   guardianRepo,
+		progressRepo:   progressRepo,
 	}
 }
 
@@ -80,13 +86,35 @@ type TutorDashboard struct {
 	ActiveSession      *domain.Session           `json:"active_session,omitempty"`
 }
 
+// EnrollmentWithDetails represents an enrollment with full class and session objects
+type EnrollmentWithDetails struct {
+	*domain.Enrollment
+	Class   *domain.Class   `json:"class"`
+	Session *domain.Session `json:"session"`
+}
+
 // StudentDashboard represents dashboard data for STUDENT
 type StudentDashboard struct {
 	TotalEnrollments   int                       `json:"total_enrollments"`
-	Enrollments        []*domain.Enrollment      `json:"enrollments"`
+	Enrollments        []*EnrollmentWithDetails  `json:"enrollments"`
 	TotalCourses       int                       `json:"total_courses"`
 	Courses            []*domain.Course          `json:"courses"`
 	ActiveSession      *domain.Session           `json:"active_session,omitempty"`
+}
+
+// WardDashboardInfo represents summary information for a single ward
+type WardDashboardInfo struct {
+	Student    *domain.User             `json:"student"`
+	Enrollment *EnrollmentWithDetails   `json:"enrollment,omitempty"`
+	Progress   []*domain.Progress       `json:"progress,omitempty"`
+	Invoices   []*domain.Invoice        `json:"invoices,omitempty"`
+}
+
+// ParentDashboard represents dashboard data for PARENT
+type ParentDashboard struct {
+	TotalWards    int                   `json:"total_wards"`
+	Wards         []*WardDashboardInfo  `json:"wards"`
+	ActiveSession *domain.Session       `json:"active_session,omitempty"`
 }
 
 // GetDashboard returns role-specific dashboard data
@@ -114,6 +142,11 @@ func (s *DashboardService) GetDashboard(
 			return nil, fmt.Errorf("tenant ID required for STUDENT role")
 		}
 		return s.getStudentDashboard(ctx, userID, *tenantID)
+	case domain.RoleParent:
+		if tenantID == nil {
+			return nil, fmt.Errorf("tenant ID required for PARENT role")
+		}
+		return s.getParentDashboard(ctx, userID, *tenantID)
 	default:
 		return nil, fmt.Errorf("unknown role: %s", role)
 	}
@@ -348,15 +381,48 @@ func (s *DashboardService) getStudentDashboard(ctx context.Context, studentID uu
 		return nil, fmt.Errorf("failed to list enrollments: %w", err)
 	}
 
-	// Get courses for the enrolled classes
+	// Cache for classes and sessions to avoid repeated queries
+	classCache := make(map[uuid.UUID]*domain.Class)
+	sessionCache := make(map[uuid.UUID]*domain.Session)
+
+	// Build enrollments with details
+	enrollmentsWithDetails := make([]*EnrollmentWithDetails, 0, len(enrollments))
 	var courses []*domain.Course
 	classIDs := make(map[uuid.UUID]bool)
+
 	for _, enrollment := range enrollments {
+		// Get class (from cache or fetch)
+		class, ok := classCache[enrollment.ClassID]
+		if !ok {
+			class, err = s.classRepo.Get(ctx, enrollment.ClassID)
+			if err != nil {
+				continue // Skip if class not found
+			}
+			classCache[enrollment.ClassID] = class
+		}
+
+		// Get session (from cache or fetch)
+		session, ok := sessionCache[enrollment.SessionID]
+		if !ok {
+			session, err = s.sessionRepo.Get(ctx, enrollment.SessionID)
+			if err != nil {
+				continue // Skip if session not found
+			}
+			sessionCache[enrollment.SessionID] = session
+		}
+
+		enrollmentsWithDetails = append(enrollmentsWithDetails, &EnrollmentWithDetails{
+			Enrollment: enrollment,
+			Class:      class,
+			Session:    session,
+		})
+
 		if enrollment.Status == domain.EnrollmentStatusActive {
 			classIDs[enrollment.ClassID] = true
 		}
 	}
 
+	// Get courses for the enrolled classes
 	for classID := range classIDs {
 		classCourses, _, err := s.courseRepo.ListByClass(ctx, classID, paginationParams)
 		if err != nil {
@@ -381,9 +447,96 @@ func (s *DashboardService) getStudentDashboard(ctx context.Context, studentID uu
 
 	return &StudentDashboard{
 		TotalEnrollments: len(enrollments),
-		Enrollments:      enrollments,
+		Enrollments:      enrollmentsWithDetails,
 		TotalCourses:     len(courses),
 		Courses:          courses,
 		ActiveSession:    activeSession,
+	}, nil
+}
+
+// getParentDashboard returns dashboard for PARENT
+func (s *DashboardService) getParentDashboard(ctx context.Context, parentID uuid.UUID, tenantID uuid.UUID) (*ParentDashboard, error) {
+	paginationParams := repository.PaginationParams{
+		Limit:     100,
+		SortOrder: "DESC",
+	}
+
+	// Get all wards for this parent
+	guardians, _, err := s.guardianRepo.ListByGuardian(ctx, parentID, paginationParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list wards: %w", err)
+	}
+
+	wards := make([]*WardDashboardInfo, 0, len(guardians))
+
+	for _, g := range guardians {
+		// Get student user
+		student, err := s.userRepo.GetByID(ctx, g.StudentID)
+		if err != nil {
+			continue
+		}
+		student.PasswordHash = ""
+
+		wardInfo := &WardDashboardInfo{
+			Student: student,
+		}
+
+		// Get current enrollment for the student
+		if student.TenantID != nil {
+			enrollment, err := s.enrollmentRepo.GetCurrentByStudent(ctx, g.StudentID, *student.TenantID)
+			if err == nil && enrollment != nil {
+				enrollmentWithDetails := &EnrollmentWithDetails{
+					Enrollment: enrollment,
+				}
+
+				// Get class
+				class, err := s.classRepo.Get(ctx, enrollment.ClassID)
+				if err == nil {
+					enrollmentWithDetails.Class = class
+				}
+
+				// Get session
+				session, err := s.sessionRepo.Get(ctx, enrollment.SessionID)
+				if err == nil {
+					enrollmentWithDetails.Session = session
+				}
+
+				wardInfo.Enrollment = enrollmentWithDetails
+			}
+		}
+
+		// Get progress records for the student
+		progress, _, err := s.progressRepo.ListByStudent(ctx, g.StudentID, repository.PaginationParams{Limit: 20})
+		if err == nil {
+			wardInfo.Progress = progress
+		}
+
+		// Get invoices for the student
+		invoices, _, err := s.invoiceRepo.ListByStudent(ctx, g.StudentID, repository.PaginationParams{Limit: 10})
+		if err == nil {
+			wardInfo.Invoices = invoices
+		}
+
+		wards = append(wards, wardInfo)
+	}
+
+	// Get active session
+	sessions, _, err := s.sessionRepo.ListByTenant(ctx, tenantID, nil, paginationParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list sessions: %w", err)
+	}
+
+	var activeSession *domain.Session
+	for _, session := range sessions {
+		if session.Status == domain.SessionStatusActive {
+			activeSession = session
+			break
+		}
+	}
+
+	return &ParentDashboard{
+		TotalWards:    len(wards),
+		Wards:         wards,
+		ActiveSession: activeSession,
 	}, nil
 }

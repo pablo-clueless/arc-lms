@@ -14,24 +14,27 @@ import (
 
 // CourseService handles course management operations
 type CourseService struct {
-	courseRepo   *postgres.CourseRepository
-	classRepo    *postgres.ClassRepository
-	userRepo     *postgres.UserRepository
-	auditService *AuditService
+	courseRepo        *postgres.CourseRepository
+	courseContentRepo *postgres.CourseContentRepository
+	classRepo         *postgres.ClassRepository
+	userRepo          *postgres.UserRepository
+	auditService      *AuditService
 }
 
 // NewCourseService creates a new course service
 func NewCourseService(
 	courseRepo *postgres.CourseRepository,
+	courseContentRepo *postgres.CourseContentRepository,
 	classRepo *postgres.ClassRepository,
 	userRepo *postgres.UserRepository,
 	auditService *AuditService,
 ) *CourseService {
 	return &CourseService{
-		courseRepo:   courseRepo,
-		classRepo:    classRepo,
-		userRepo:     userRepo,
-		auditService: auditService,
+		courseRepo:        courseRepo,
+		courseContentRepo: courseContentRepo,
+		classRepo:         classRepo,
+		userRepo:          userRepo,
+		auditService:      auditService,
 	}
 }
 
@@ -314,4 +317,288 @@ func (s *CourseService) ReassignTutor(
 	)
 
 	return course, nil
+}
+
+// ==================== Course Content Methods ====================
+
+// CreateContentRequest represents content creation data
+type CreateContentRequest struct {
+	Title       string             `json:"title" validate:"required,min=2,max=200"`
+	ContentType domain.ContentType `json:"content_type" validate:"required,oneof=TEXT VIDEO IMAGE AUDIO DOCUMENT LINK"`
+	Content     string             `json:"content" validate:"required"`
+	Description *string            `json:"description,omitempty" validate:"omitempty,max=1000"`
+	Duration    *int               `json:"duration,omitempty"`
+	FileSize    *int64             `json:"file_size,omitempty"`
+	MimeType    *string            `json:"mime_type,omitempty"`
+}
+
+// UpdateContentRequest represents content update data
+type UpdateContentRequest struct {
+	Title       *string             `json:"title,omitempty" validate:"omitempty,min=2,max=200"`
+	ContentType *domain.ContentType `json:"content_type,omitempty" validate:"omitempty,oneof=TEXT VIDEO IMAGE AUDIO DOCUMENT LINK"`
+	Content     *string             `json:"content,omitempty"`
+	Description *string             `json:"description,omitempty" validate:"omitempty,max=1000"`
+	Duration    *int                `json:"duration,omitempty"`
+	FileSize    *int64              `json:"file_size,omitempty"`
+	MimeType    *string             `json:"mime_type,omitempty"`
+}
+
+// ReorderContentRequest represents content reordering data
+type ReorderContentRequest struct {
+	ContentIDs []uuid.UUID `json:"content_ids" validate:"required,min=1"`
+}
+
+// CreateContent creates new content for a course
+func (s *CourseService) CreateContent(
+	ctx context.Context,
+	courseID uuid.UUID,
+	req *CreateContentRequest,
+	actorID uuid.UUID,
+	actorRole domain.Role,
+	ipAddress string,
+) (*domain.CourseContent, error) {
+	// Verify course exists
+	course, err := s.courseRepo.Get(ctx, courseID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get course: %w", err)
+	}
+
+	// Get next order index
+	orderIndex, err := s.courseContentRepo.GetNextOrderIndex(ctx, courseID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get next order index: %w", err)
+	}
+
+	content := &domain.CourseContent{
+		ID:          uuid.New(),
+		CourseID:    courseID,
+		Title:       req.Title,
+		ContentType: req.ContentType,
+		Content:     req.Content,
+		Description: req.Description,
+		OrderIndex:  orderIndex,
+		Duration:    req.Duration,
+		FileSize:    req.FileSize,
+		MimeType:    req.MimeType,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	if err := s.courseContentRepo.Create(ctx, content, nil); err != nil {
+		return nil, fmt.Errorf("failed to create content: %w", err)
+	}
+
+	// Audit log
+	_ = s.auditService.LogAction(
+		ctx,
+		domain.AuditActionCourseUpdated,
+		actorID,
+		actorRole,
+		&course.TenantID,
+		"course_content",
+		content.ID,
+		nil,
+		content,
+		ipAddress,
+	)
+
+	return content, nil
+}
+
+// GetContent gets a content item by ID
+func (s *CourseService) GetContent(ctx context.Context, id uuid.UUID) (*domain.CourseContent, error) {
+	content, err := s.courseContentRepo.Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get content: %w", err)
+	}
+	return content, nil
+}
+
+// UpdateContent updates a content item
+func (s *CourseService) UpdateContent(
+	ctx context.Context,
+	id uuid.UUID,
+	req *UpdateContentRequest,
+	actorID uuid.UUID,
+	actorRole domain.Role,
+	ipAddress string,
+) (*domain.CourseContent, error) {
+	// Get existing content
+	content, err := s.courseContentRepo.Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get content: %w", err)
+	}
+
+	// Get course for tenant ID
+	course, err := s.courseRepo.Get(ctx, content.CourseID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get course: %w", err)
+	}
+
+	// Store before state for audit
+	beforeState := *content
+
+	// Update fields
+	if req.Title != nil {
+		content.Title = *req.Title
+	}
+	if req.ContentType != nil {
+		content.ContentType = *req.ContentType
+	}
+	if req.Content != nil {
+		content.Content = *req.Content
+	}
+	if req.Description != nil {
+		content.Description = req.Description
+	}
+	if req.Duration != nil {
+		content.Duration = req.Duration
+	}
+	if req.FileSize != nil {
+		content.FileSize = req.FileSize
+	}
+	if req.MimeType != nil {
+		content.MimeType = req.MimeType
+	}
+	content.UpdatedAt = time.Now()
+
+	if err := s.courseContentRepo.Update(ctx, content, nil); err != nil {
+		return nil, fmt.Errorf("failed to update content: %w", err)
+	}
+
+	// Audit log
+	_ = s.auditService.LogAction(
+		ctx,
+		domain.AuditActionCourseUpdated,
+		actorID,
+		actorRole,
+		&course.TenantID,
+		"course_content",
+		content.ID,
+		&beforeState,
+		content,
+		ipAddress,
+	)
+
+	return content, nil
+}
+
+// DeleteContent deletes a content item
+func (s *CourseService) DeleteContent(
+	ctx context.Context,
+	id uuid.UUID,
+	actorID uuid.UUID,
+	actorRole domain.Role,
+	ipAddress string,
+) error {
+	// Get content for audit
+	content, err := s.courseContentRepo.Get(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to get content: %w", err)
+	}
+
+	// Get course for tenant ID
+	course, err := s.courseRepo.Get(ctx, content.CourseID)
+	if err != nil {
+		return fmt.Errorf("failed to get course: %w", err)
+	}
+
+	// Delete content
+	if err := s.courseContentRepo.Delete(ctx, id); err != nil {
+		return fmt.Errorf("failed to delete content: %w", err)
+	}
+
+	// Audit log
+	_ = s.auditService.LogAction(
+		ctx,
+		domain.AuditActionCourseUpdated,
+		actorID,
+		actorRole,
+		&course.TenantID,
+		"course_content",
+		content.ID,
+		content,
+		nil,
+		ipAddress,
+	)
+
+	return nil
+}
+
+// ListContents lists all content items for a course
+func (s *CourseService) ListContents(
+	ctx context.Context,
+	courseID uuid.UUID,
+	contentType *domain.ContentType,
+	params repository.PaginationParams,
+) ([]*domain.CourseContent, *repository.PaginatedResult, error) {
+	var contents []*domain.CourseContent
+	var total int
+	var err error
+
+	if contentType != nil {
+		contents, total, err = s.courseContentRepo.ListByCourseAndType(ctx, courseID, *contentType, params)
+	} else {
+		contents, total, err = s.courseContentRepo.ListByCourse(ctx, courseID, params)
+	}
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list contents: %w", err)
+	}
+
+	pagination := repository.BuildPaginatedResult(total, params)
+
+	return contents, &pagination, nil
+}
+
+// ReorderContents reorders content items for a course
+func (s *CourseService) ReorderContents(
+	ctx context.Context,
+	courseID uuid.UUID,
+	req *ReorderContentRequest,
+	actorID uuid.UUID,
+	actorRole domain.Role,
+	ipAddress string,
+) error {
+	// Verify course exists
+	course, err := s.courseRepo.Get(ctx, courseID)
+	if err != nil {
+		return fmt.Errorf("failed to get course: %w", err)
+	}
+
+	// Reorder contents
+	if err := s.courseContentRepo.ReorderContents(ctx, courseID, req.ContentIDs, nil); err != nil {
+		return fmt.Errorf("failed to reorder contents: %w", err)
+	}
+
+	// Audit log
+	_ = s.auditService.LogAction(
+		ctx,
+		domain.AuditActionCourseUpdated,
+		actorID,
+		actorRole,
+		&course.TenantID,
+		"course_content",
+		courseID,
+		nil,
+		map[string]interface{}{"action": "reorder", "content_ids": req.ContentIDs},
+		ipAddress,
+	)
+
+	return nil
+}
+
+// GetCourseWithContents returns a course with all its content items
+func (s *CourseService) GetCourseWithContents(ctx context.Context, courseID uuid.UUID) (*domain.Course, []*domain.CourseContent, error) {
+	course, err := s.courseRepo.Get(ctx, courseID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get course: %w", err)
+	}
+
+	contents, _, err := s.courseContentRepo.ListByCourse(ctx, courseID, repository.PaginationParams{Limit: 1000})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list contents: %w", err)
+	}
+
+	return course, contents, nil
 }

@@ -112,6 +112,10 @@ const (
 	AuditActionSystemConfigUpdated     AuditAction = "SYSTEM_CONFIG_UPDATED"
 	AuditActionSystemConfigDeleted     AuditAction = "SYSTEM_CONFIG_DELETED"
 	AuditActionSystemConfigBulkUpdated AuditAction = "SYSTEM_CONFIG_BULK_UPDATED"
+
+	// Guardian actions
+	AuditActionGuardianLinked   AuditAction = "GUARDIAN_LINKED"
+	AuditActionGuardianUnlinked AuditAction = "GUARDIAN_UNLINKED"
 )
 
 // AuditResourceType represents the type of resource being audited
@@ -152,8 +156,8 @@ type AuditLog struct {
 	ResourceType     AuditResourceType `json:"resource_type" validate:"required"`
 	ResourceID       uuid.UUID         `json:"resource_id" validate:"required,uuid"`
 	ResourceName     *string           `json:"resource_name,omitempty" validate:"omitempty,max=200"` // Human-readable resource name
-	BeforeState      *json.RawMessage  `json:"before_state,omitempty"` // JSON snapshot of resource before change
-	AfterState       *json.RawMessage  `json:"after_state,omitempty"`  // JSON snapshot of resource after change
+	BeforeState      *json.RawMessage  `json:"before_state,omitempty" swaggertype:"object"` // JSON snapshot of resource before change
+	AfterState       *json.RawMessage  `json:"after_state,omitempty" swaggertype:"object"`  // JSON snapshot of resource after change
 	Changes          map[string]interface{} `json:"changes,omitempty"` // Field-level changes for updates
 	IPAddress        string            `json:"ip_address" validate:"required"`
 	UserAgent        *string           `json:"user_agent,omitempty" validate:"omitempty,max=500"`

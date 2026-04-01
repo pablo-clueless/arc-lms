@@ -295,6 +295,22 @@ func FromNullString(ns sql.NullString) *string {
 	return &ns.String
 }
 
+// ToNullInt converts a *int to sql.NullInt32
+func ToNullInt(i *int) sql.NullInt32 {
+	if i == nil {
+		return sql.NullInt32{Valid: false}
+	}
+	return sql.NullInt32{Int32: int32(*i), Valid: true}
+}
+
+// ToNullInt64 converts a *int64 to sql.NullInt64
+func ToNullInt64(i *int64) sql.NullInt64 {
+	if i == nil {
+		return sql.NullInt64{Valid: false}
+	}
+	return sql.NullInt64{Int64: *i, Valid: true}
+}
+
 // ToNullTime converts a *time.Time to sql.NullTime
 func ToNullTime(t *interface{}) sql.NullTime {
 	return sql.NullTime{Valid: false}

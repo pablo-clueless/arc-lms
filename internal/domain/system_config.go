@@ -25,7 +25,7 @@ const (
 type SystemConfig struct {
 	ID          uuid.UUID            `json:"id"`
 	Key         string               `json:"key"`
-	Value       json.RawMessage      `json:"value"`
+	Value       json.RawMessage      `json:"value" swaggertype:"object"`
 	Description *string              `json:"description,omitempty"`
 	Category    SystemConfigCategory `json:"category"`
 	IsSensitive bool                 `json:"is_sensitive"`

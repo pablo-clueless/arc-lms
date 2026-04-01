@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	"arc-lms/internal/domain"
 	"arc-lms/internal/pkg/errors"
 	"arc-lms/internal/pkg/validator"
 	"arc-lms/internal/repository"
@@ -225,4 +226,247 @@ func (h *CourseHandler) ReassignTutor(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, course)
+}
+
+// ==================== Course Content Handlers ====================
+
+// CreateContent godoc
+// @Summary Create course content
+// @Description Add new content to a course (TUTOR/ADMIN)
+// @Tags Course Content
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path string true "Course ID"
+// @Param request body service.CreateContentRequest true "Content data"
+// @Success 201 {object} domain.CourseContent
+// @Failure 400 {object} errors.ErrorResponse
+// @Router /courses/{id}/contents [post]
+func (h *CourseHandler) CreateContent(c *gin.Context) {
+	var req service.CreateContentRequest
+
+	courseID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		errors.BadRequest(c, "invalid course ID", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	actorIDValue, _ := c.Get("user_id")
+	actorID, _ := actorIDValue.(uuid.UUID)
+	actorRole, _ := GetRoleFromContext(c)
+
+	if !validator.BindAndValidate(c, &req) {
+		return
+	}
+
+	content, err := h.courseService.CreateContent(c.Request.Context(), courseID, &req, actorID, actorRole, c.ClientIP())
+	if err != nil {
+		errors.BadRequest(c, "failed to create content", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, content)
+}
+
+// ListContents godoc
+// @Summary List course contents
+// @Description List all content items for a course
+// @Tags Course Content
+// @Security BearerAuth
+// @Produce json
+// @Param id path string true "Course ID"
+// @Param type query string false "Filter by content type (TEXT, VIDEO, IMAGE, AUDIO, DOCUMENT, LINK)"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} errors.ErrorResponse
+// @Router /courses/{id}/contents [get]
+func (h *CourseHandler) ListContents(c *gin.Context) {
+	courseID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		errors.BadRequest(c, "invalid course ID", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	var contentType *string
+	if ct := c.Query("type"); ct != "" {
+		contentType = &ct
+	}
+
+	params := repository.PaginationParams{Limit: 100, SortOrder: "ASC"}
+
+	var contents interface{}
+	var pagination interface{}
+	var listErr error
+
+	if contentType != nil {
+		ct := *contentType
+		contents, pagination, listErr = h.courseService.ListContents(c.Request.Context(), courseID, (*domain.ContentType)(&ct), params)
+	} else {
+		contents, pagination, listErr = h.courseService.ListContents(c.Request.Context(), courseID, nil, params)
+	}
+
+	if listErr != nil {
+		errors.BadRequest(c, "failed to list contents", map[string]interface{}{"error": listErr.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": contents, "pagination": pagination})
+}
+
+// GetContent godoc
+// @Summary Get content by ID
+// @Description Get a specific content item
+// @Tags Course Content
+// @Security BearerAuth
+// @Produce json
+// @Param id path string true "Course ID"
+// @Param content_id path string true "Content ID"
+// @Success 200 {object} domain.CourseContent
+// @Failure 404 {object} errors.ErrorResponse
+// @Router /courses/{id}/contents/{content_id} [get]
+func (h *CourseHandler) GetContent(c *gin.Context) {
+	contentID, err := uuid.Parse(c.Param("content_id"))
+	if err != nil {
+		errors.BadRequest(c, "invalid content ID", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	content, err := h.courseService.GetContent(c.Request.Context(), contentID)
+	if err != nil {
+		errors.NotFound(c, "content not found")
+		return
+	}
+
+	c.JSON(http.StatusOK, content)
+}
+
+// UpdateContent godoc
+// @Summary Update content
+// @Description Update a content item (TUTOR/ADMIN)
+// @Tags Course Content
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path string true "Course ID"
+// @Param content_id path string true "Content ID"
+// @Param request body service.UpdateContentRequest true "Update data"
+// @Success 200 {object} domain.CourseContent
+// @Failure 400 {object} errors.ErrorResponse
+// @Router /courses/{id}/contents/{content_id} [put]
+func (h *CourseHandler) UpdateContent(c *gin.Context) {
+	var req service.UpdateContentRequest
+
+	contentID, err := uuid.Parse(c.Param("content_id"))
+	if err != nil {
+		errors.BadRequest(c, "invalid content ID", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	actorIDValue, _ := c.Get("user_id")
+	actorID, _ := actorIDValue.(uuid.UUID)
+	actorRole, _ := GetRoleFromContext(c)
+
+	if !validator.BindAndValidate(c, &req) {
+		return
+	}
+
+	content, err := h.courseService.UpdateContent(c.Request.Context(), contentID, &req, actorID, actorRole, c.ClientIP())
+	if err != nil {
+		errors.BadRequest(c, "failed to update content", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, content)
+}
+
+// DeleteContent godoc
+// @Summary Delete content
+// @Description Delete a content item (TUTOR/ADMIN)
+// @Tags Course Content
+// @Security BearerAuth
+// @Produce json
+// @Param id path string true "Course ID"
+// @Param content_id path string true "Content ID"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} errors.ErrorResponse
+// @Router /courses/{id}/contents/{content_id} [delete]
+func (h *CourseHandler) DeleteContent(c *gin.Context) {
+	contentID, err := uuid.Parse(c.Param("content_id"))
+	if err != nil {
+		errors.BadRequest(c, "invalid content ID", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	actorIDValue, _ := c.Get("user_id")
+	actorID, _ := actorIDValue.(uuid.UUID)
+	actorRole, _ := GetRoleFromContext(c)
+
+	if err := h.courseService.DeleteContent(c.Request.Context(), contentID, actorID, actorRole, c.ClientIP()); err != nil {
+		errors.BadRequest(c, "failed to delete content", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Content deleted successfully"})
+}
+
+// ReorderContents godoc
+// @Summary Reorder course contents
+// @Description Reorder content items for a course (TUTOR/ADMIN)
+// @Tags Course Content
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path string true "Course ID"
+// @Param request body service.ReorderContentRequest true "New order of content IDs"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} errors.ErrorResponse
+// @Router /courses/{id}/contents/reorder [post]
+func (h *CourseHandler) ReorderContents(c *gin.Context) {
+	var req service.ReorderContentRequest
+
+	courseID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		errors.BadRequest(c, "invalid course ID", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	actorIDValue, _ := c.Get("user_id")
+	actorID, _ := actorIDValue.(uuid.UUID)
+	actorRole, _ := GetRoleFromContext(c)
+
+	if !validator.BindAndValidate(c, &req) {
+		return
+	}
+
+	if err := h.courseService.ReorderContents(c.Request.Context(), courseID, &req, actorID, actorRole, c.ClientIP()); err != nil {
+		errors.BadRequest(c, "failed to reorder contents", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Contents reordered successfully"})
+}
+
+// GetCourseWithContents godoc
+// @Summary Get course with all contents
+// @Description Get course details including all content items
+// @Tags Courses
+// @Security BearerAuth
+// @Produce json
+// @Param id path string true "Course ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} errors.ErrorResponse
+// @Router /courses/{id}/full [get]
+func (h *CourseHandler) GetCourseWithContents(c *gin.Context) {
+	courseID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		errors.BadRequest(c, "invalid course ID", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	course, contents, err := h.courseService.GetCourseWithContents(c.Request.Context(), courseID)
+	if err != nil {
+		errors.NotFound(c, "course not found")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"course": course, "contents": contents})
 }

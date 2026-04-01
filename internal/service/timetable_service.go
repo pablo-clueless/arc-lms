@@ -303,6 +303,11 @@ func (s *TimetableService) GenerateTimetable(
 	// Check for existing timetable and archive it if needed
 	existingTimetable, err := s.timetableRepo.GetByClassAndTerm(ctx, req.ClassID, req.TermID)
 	if err == nil && existingTimetable != nil {
+		// Delete periods from existing timetable first (to avoid exclusion constraint violations)
+		if err := s.periodRepo.DeleteByTimetable(ctx, existingTimetable.ID, tx); err != nil {
+			return nil, fmt.Errorf("failed to delete existing periods: %w", err)
+		}
+
 		// Archive existing timetable
 		existingTimetable.Archive()
 		if err := s.timetableRepo.Archive(ctx, existingTimetable.ID, tx); err != nil {
@@ -410,27 +415,30 @@ func (s *TimetableService) generatePeriods(
 	// Track tutor schedules to avoid conflicts (tutor -> day -> list of time ranges as [start_minutes, end_minutes])
 	tutorSchedule := make(map[uuid.UUID]map[domain.DayOfWeek][][2]int)
 
-	// Load existing tutor schedules from other timetables in this term
-	// This prevents the exclusion constraint violation when a tutor teaches multiple classes
+	// Collect unique tutor IDs
+	tutorIDSet := make(map[uuid.UUID]bool)
 	for _, course := range courses {
-		if tutorSchedule[course.AssignedTutorID] == nil {
-			tutorSchedule[course.AssignedTutorID] = make(map[domain.DayOfWeek][][2]int)
+		tutorIDSet[course.AssignedTutorID] = true
+	}
+	tutorIDs := make([]uuid.UUID, 0, len(tutorIDSet))
+	for tutorID := range tutorIDSet {
+		tutorIDs = append(tutorIDs, tutorID)
+	}
 
-			// Get existing periods for this tutor in the term
-			existingPeriods, err := s.periodRepo.ListByTutor(ctx, course.AssignedTutorID, timetable.TermID)
-			if err != nil {
-				// If error, continue without pre-loading (constraint will catch conflicts)
-				continue
+	// Load existing tutor schedules from ALL non-archived timetables in a single query
+	// This prevents the exclusion constraint violation when a tutor teaches multiple classes
+	existingPeriods, err := s.periodRepo.ListAllActivePeriodsByTutors(ctx, tutorIDs, timetable.TenantID, tx)
+	if err == nil {
+		for _, ep := range existingPeriods {
+			if tutorSchedule[ep.TutorID] == nil {
+				tutorSchedule[ep.TutorID] = make(map[domain.DayOfWeek][][2]int)
 			}
-
-			for _, ep := range existingPeriods {
-				startMinutes := ep.StartTime.Hour()*60 + ep.StartTime.Minute()
-				endMinutes := ep.EndTime.Hour()*60 + ep.EndTime.Minute()
-				tutorSchedule[course.AssignedTutorID][ep.DayOfWeek] = append(
-					tutorSchedule[course.AssignedTutorID][ep.DayOfWeek],
-					[2]int{startMinutes, endMinutes},
-				)
-			}
+			startMinutes := ep.StartTime.Hour()*60 + ep.StartTime.Minute()
+			endMinutes := ep.EndTime.Hour()*60 + ep.EndTime.Minute()
+			tutorSchedule[ep.TutorID][ep.DayOfWeek] = append(
+				tutorSchedule[ep.TutorID][ep.DayOfWeek],
+				[2]int{startMinutes, endMinutes},
+			)
 		}
 	}
 
