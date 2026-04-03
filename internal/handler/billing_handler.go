@@ -39,11 +39,12 @@ func NewBillingHandler(billingService *service.BillingService, pdfService *servi
 
 // ListInvoices godoc
 // @Summary List invoices
-// @Description List invoices for a tenant (admins see their tenant, superadmin sees all)
+// @Description List invoices for a tenant (admins see their tenant, superadmin sees all or can filter by tenant_id)
 // @Tags Billing
 // @Security BearerAuth
 // @Produce json
 // @Param status query string false "Filter by status (PENDING, PAID, OVERDUE, DISPUTED, VOIDED)"
+// @Param tenant_id query string false "Filter by tenant ID (SuperAdmin only)"
 // @Param page query int false "Page number"
 // @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
@@ -74,9 +75,15 @@ func (h *BillingHandler) ListInvoices(c *gin.Context) {
 		}
 	}
 
-	// SuperAdmin sees all invoices, others see only their tenant
+	// SuperAdmin can filter by tenant_id or see all, others see only their tenant
 	var tenantIDPtr *uuid.UUID
-	if role != domain.RoleSuperAdmin {
+	if role == domain.RoleSuperAdmin {
+		if tenantIDStr := c.Query("tenant_id"); tenantIDStr != "" {
+			if parsed, err := uuid.Parse(tenantIDStr); err == nil {
+				tenantIDPtr = &parsed
+			}
+		}
+	} else {
 		tenantIDPtr = &tenantID
 	}
 
