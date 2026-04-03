@@ -32,6 +32,7 @@ func NewExaminationHandler(examinationService *service.ExaminationService) *Exam
 // @Security BearerAuth
 // @Produce json
 // @Param course_id query string false "Filter by course ID"
+// @Param class_id query string false "Filter by class ID"
 // @Param term_id query string false "Filter by term ID"
 // @Param status query string false "Filter by status (DRAFT, SCHEDULED, IN_PROGRESS, COMPLETED)"
 // @Param page query int false "Page number"
@@ -52,6 +53,16 @@ func (h *ExaminationHandler) ListExaminations(c *gin.Context) {
 			return
 		}
 		courseID = &parsed
+	}
+
+	var classID *uuid.UUID
+	if classIDStr := c.Query("class_id"); classIDStr != "" {
+		parsed, err := uuid.Parse(classIDStr)
+		if err != nil {
+			errors.BadRequest(c, "invalid class_id", nil)
+			return
+		}
+		classID = &parsed
 	}
 
 	var termID *uuid.UUID
@@ -82,7 +93,7 @@ func (h *ExaminationHandler) ListExaminations(c *gin.Context) {
 		}
 	}
 
-	examinations, pagination, err := h.examinationService.ListExaminations(c.Request.Context(), tenantID, courseID, termID, status, params)
+	examinations, pagination, err := h.examinationService.ListExaminations(c.Request.Context(), tenantID, courseID, classID, termID, status, params)
 	if err != nil {
 		errors.InternalError(c, "failed to list examinations")
 		return

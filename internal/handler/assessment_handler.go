@@ -29,24 +29,18 @@ func NewAssessmentHandler(assessmentService *service.AssessmentService) *Assessm
 // === Quiz Handlers ===
 
 // ListQuizzes godoc
-// @Summary List quizzes for a course
+// @Summary List quizzes for a course or class
 // @Tags Quizzes
 // @Security BearerAuth
 // @Produce json
-// @Param course_id query string true "Course ID"
+// @Param course_id query string false "Course ID (from path or query)"
+// @Param class_id query string false "Filter by class ID"
 // @Param status query string false "Filter by status (DRAFT, PUBLISHED, ARCHIVED)"
 // @Param page query int false "Page number"
 // @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
 // @Router /courses/{course_id}/quizzes [get]
 func (h *AssessmentHandler) ListQuizzes(c *gin.Context) {
-	courseIDStr := c.Param("id")
-	courseID, err := uuid.Parse(courseIDStr)
-	if err != nil {
-		errors.BadRequest(c, "invalid course ID", nil)
-		return
-	}
-
 	var status *domain.AssessmentStatus
 	if statusStr := c.Query("status"); statusStr != "" {
 		s := domain.AssessmentStatus(statusStr)
@@ -63,6 +57,30 @@ func (h *AssessmentHandler) ListQuizzes(c *gin.Context) {
 		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
 			params.Limit = limit
 		}
+	}
+
+	// Check for class_id filter first
+	if classIDStr := c.Query("class_id"); classIDStr != "" {
+		classID, err := uuid.Parse(classIDStr)
+		if err != nil {
+			errors.BadRequest(c, "invalid class_id", nil)
+			return
+		}
+		quizzes, pagination, err := h.assessmentService.ListQuizzesByClass(c.Request.Context(), classID, status, params)
+		if err != nil {
+			errors.InternalError(c, "failed to list quizzes")
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": quizzes, "pagination": pagination})
+		return
+	}
+
+	// Default to course_id from path
+	courseIDStr := c.Param("id")
+	courseID, err := uuid.Parse(courseIDStr)
+	if err != nil {
+		errors.BadRequest(c, "invalid course ID", nil)
+		return
 	}
 
 	quizzes, pagination, err := h.assessmentService.ListQuizzesByCourse(c.Request.Context(), courseID, status, params)
@@ -378,21 +396,18 @@ func (h *AssessmentHandler) ListQuizSubmissions(c *gin.Context) {
 // === Assignment Handlers ===
 
 // ListAssignments godoc
-// @Summary List assignments for a course
+// @Summary List assignments for a course or class
 // @Tags Assignments
 // @Security BearerAuth
 // @Produce json
-// @Param course_id query string true "Course ID"
+// @Param course_id query string false "Course ID (from path or query)"
+// @Param class_id query string false "Filter by class ID"
+// @Param status query string false "Filter by status (DRAFT, PUBLISHED, ARCHIVED)"
+// @Param page query int false "Page number"
+// @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
 // @Router /courses/{course_id}/assignments [get]
 func (h *AssessmentHandler) ListAssignments(c *gin.Context) {
-	courseIDStr := c.Param("id")
-	courseID, err := uuid.Parse(courseIDStr)
-	if err != nil {
-		errors.BadRequest(c, "invalid course ID", nil)
-		return
-	}
-
 	var status *domain.AssessmentStatus
 	if statusStr := c.Query("status"); statusStr != "" {
 		s := domain.AssessmentStatus(statusStr)
@@ -410,6 +425,31 @@ func (h *AssessmentHandler) ListAssignments(c *gin.Context) {
 			params.Limit = limit
 		}
 	}
+
+	// Check for class_id filter first
+	if classIDStr := c.Query("class_id"); classIDStr != "" {
+		classID, err := uuid.Parse(classIDStr)
+		if err != nil {
+			errors.BadRequest(c, "invalid class_id", nil)
+			return
+		}
+		assignments, pagination, err := h.assessmentService.ListAssignmentsByClass(c.Request.Context(), classID, status, params)
+		if err != nil {
+			errors.InternalError(c, "failed to list assignments")
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": assignments, "pagination": pagination})
+		return
+	}
+
+	// Default to course_id from path
+	courseIDStr := c.Param("id")
+	courseID, err := uuid.Parse(courseIDStr)
+	if err != nil {
+		errors.BadRequest(c, "invalid course ID", nil)
+		return
+	}
+
 	assignments, pagination, err := h.assessmentService.ListAssignmentsByCourse(c.Request.Context(), courseID, status, params)
 	if err != nil {
 		errors.InternalError(c, "failed to list assignments")

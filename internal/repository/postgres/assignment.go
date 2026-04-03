@@ -33,17 +33,18 @@ func (r *AssignmentRepository) Create(ctx context.Context, assignment *domain.As
 
 	query := `
 		INSERT INTO assignments (
-			id, tenant_id, course_id, created_by_tutor_id, title, description,
+			id, tenant_id, course_id, class_id, created_by_tutor_id, title, description,
 			attachment_urls, max_marks, submission_deadline, allow_late_submission,
 			hard_cutoff_date, allowed_file_formats, max_file_size, status,
 			questions, created_at, updated_at, published_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 	`
 
 	_, err := r.GetDB().ExecContext(ctx, query,
 		assignment.ID,
 		assignment.TenantID,
 		assignment.CourseID,
+		assignment.ClassID,
 		assignment.CreatedByTutorID,
 		assignment.Title,
 		assignment.Description,
@@ -72,7 +73,7 @@ func (r *AssignmentRepository) Create(ctx context.Context, assignment *domain.As
 func (r *AssignmentRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Assignment, error) {
 	query := `
 		SELECT
-			id, tenant_id, course_id, created_by_tutor_id, title, description,
+			id, tenant_id, course_id, class_id, created_by_tutor_id, title, description,
 			attachment_urls, max_marks, submission_deadline, allow_late_submission,
 			hard_cutoff_date, allowed_file_formats, max_file_size, status,
 			questions, created_at, updated_at, published_at
@@ -171,7 +172,68 @@ func (r *AssignmentRepository) ListByCourse(ctx context.Context, courseID uuid.U
 	// Get paginated results
 	query := fmt.Sprintf(`
 		SELECT
-			id, tenant_id, course_id, created_by_tutor_id, title, description,
+			id, tenant_id, course_id, class_id, created_by_tutor_id, title, description,
+			attachment_urls, max_marks, submission_deadline, allow_late_submission,
+			hard_cutoff_date, allowed_file_formats, max_file_size, status,
+			questions, created_at, updated_at, published_at
+		FROM assignments
+		%s
+		ORDER BY submission_deadline %s, id DESC
+		LIMIT $%d OFFSET $%d
+	`, whereClause, params.SortOrder, argIndex, argIndex+1)
+
+	args = append(args, params.Limit, params.Offset())
+
+	rows, err := r.GetDB().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+	defer rows.Close()
+
+	assignments := make([]*domain.Assignment, 0)
+	for rows.Next() {
+		assignment, err := r.scanAssignmentFromRows(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		assignments = append(assignments, assignment)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	return assignments, total, nil
+}
+
+// ListByClass retrieves assignments for a class
+func (r *AssignmentRepository) ListByClass(ctx context.Context, classID uuid.UUID, status *domain.AssessmentStatus, params repository.PaginationParams) ([]*domain.Assignment, int, error) {
+	if err := repository.ValidatePaginationParams(&params); err != nil {
+		return nil, 0, err
+	}
+
+	// Build WHERE clause
+	whereClause := "WHERE class_id = $1"
+	args := []interface{}{classID}
+	argIndex := 2
+
+	if status != nil {
+		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
+		args = append(args, *status)
+		argIndex++
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM assignments %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
+		SELECT
+			id, tenant_id, course_id, class_id, created_by_tutor_id, title, description,
 			attachment_urls, max_marks, submission_deadline, allow_late_submission,
 			hard_cutoff_date, allowed_file_formats, max_file_size, status,
 			questions, created_at, updated_at, published_at
@@ -365,6 +427,7 @@ func (r *AssignmentRepository) scanAssignment(row *sql.Row) (*domain.Assignment,
 		&a.ID,
 		&a.TenantID,
 		&a.CourseID,
+		&a.ClassID,
 		&a.CreatedByTutorID,
 		&a.Title,
 		&a.Description,
@@ -409,6 +472,7 @@ func (r *AssignmentRepository) scanAssignmentFromRows(rows *sql.Rows) (*domain.A
 		&a.ID,
 		&a.TenantID,
 		&a.CourseID,
+		&a.ClassID,
 		&a.CreatedByTutorID,
 		&a.Title,
 		&a.Description,
@@ -548,7 +612,7 @@ func (r *AssignmentRepository) scanSubmissionFromRows(rows *sql.Rows) (*domain.A
 func (r *AssignmentRepository) ListByDeadlineRange(ctx context.Context, start, end time.Time) ([]*domain.Assignment, error) {
 	query := `
 		SELECT
-			id, tenant_id, course_id, created_by_tutor_id, title, description,
+			id, tenant_id, course_id, class_id, created_by_tutor_id, title, description,
 			attachment_urls, max_marks, submission_deadline, allow_late_submission,
 			hard_cutoff_date, allowed_file_formats, max_file_size, status,
 			questions, created_at, updated_at, published_at

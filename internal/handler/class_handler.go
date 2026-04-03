@@ -71,6 +71,7 @@ func (h *ClassHandler) CreateClass(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Param session_id query string false "Filter by session"
+// @Param tutor_id query string false "Filter by tutor (classes with courses assigned to tutor)"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} errors.ErrorResponse
 // @Router /classes [get]
@@ -86,7 +87,15 @@ func (h *ClassHandler) ListClasses(c *gin.Context) {
 		}
 	}
 
-	classes, pagination, err := h.classService.ListClasses(c.Request.Context(), tenantID, sessionID, repository.PaginationParams{Limit: 20})
+	var tutorID *uuid.UUID
+	if tidStr := c.Query("tutor_id"); tidStr != "" {
+		tid, err := uuid.Parse(tidStr)
+		if err == nil {
+			tutorID = &tid
+		}
+	}
+
+	classes, pagination, err := h.classService.ListClasses(c.Request.Context(), tenantID, sessionID, tutorID, repository.PaginationParams{Limit: 20})
 	if err != nil {
 		errors.BadRequest(c, "failed to list classes", map[string]interface{}{"error": err.Error()})
 		return

@@ -34,17 +34,18 @@ func (r *QuizRepository) Create(ctx context.Context, quiz *domain.Quiz) error {
 
 	query := `
 		INSERT INTO quizzes (
-			id, tenant_id, course_id, created_by_tutor_id, title, instructions,
+			id, tenant_id, course_id, class_id, created_by_tutor_id, title, instructions,
 			questions, total_marks, time_limit, availability_start, availability_end,
 			status, show_before_window, allow_retake, passing_percentage,
 			created_at, updated_at, published_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 	`
 
 	_, err = r.GetDB().ExecContext(ctx, query,
 		quiz.ID,
 		quiz.TenantID,
 		quiz.CourseID,
+		quiz.ClassID,
 		quiz.CreatedByTutorID,
 		quiz.Title,
 		quiz.Instructions,
@@ -73,7 +74,7 @@ func (r *QuizRepository) Create(ctx context.Context, quiz *domain.Quiz) error {
 func (r *QuizRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Quiz, error) {
 	query := `
 		SELECT
-			id, tenant_id, course_id, created_by_tutor_id, title, instructions,
+			id, tenant_id, course_id, class_id, created_by_tutor_id, title, instructions,
 			questions, total_marks, time_limit, availability_start, availability_end,
 			status, show_before_window, allow_retake, passing_percentage,
 			created_at, updated_at, published_at
@@ -172,7 +173,64 @@ func (r *QuizRepository) ListByCourse(ctx context.Context, courseID uuid.UUID, s
 	// Get paginated results
 	query := fmt.Sprintf(`
 		SELECT
-			id, tenant_id, course_id, created_by_tutor_id, title, instructions,
+			id, tenant_id, course_id, class_id, created_by_tutor_id, title, instructions,
+			questions, total_marks, time_limit, availability_start, availability_end,
+			status, show_before_window, allow_retake, passing_percentage,
+			created_at, updated_at, published_at
+		FROM quizzes
+		%s ORDER BY created_at %s, id %s LIMIT $%d OFFSET $%d`,
+		whereClause, params.SortOrder, params.SortOrder, argIndex, argIndex+1)
+	args = append(args, params.Limit, params.Offset())
+
+	rows, err := r.GetDB().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+	defer rows.Close()
+
+	quizzes := make([]*domain.Quiz, 0)
+	for rows.Next() {
+		quiz, err := r.scanQuizFromRows(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		quizzes = append(quizzes, quiz)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	return quizzes, total, nil
+}
+
+// ListByClass retrieves quizzes for a class
+func (r *QuizRepository) ListByClass(ctx context.Context, classID uuid.UUID, status *domain.AssessmentStatus, params repository.PaginationParams) ([]*domain.Quiz, int, error) {
+	if err := repository.ValidatePaginationParams(&params); err != nil {
+		return nil, 0, err
+	}
+
+	whereClause := "WHERE class_id = $1"
+	args := []interface{}{classID}
+	argIndex := 2
+
+	if status != nil {
+		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
+		args = append(args, *status)
+		argIndex++
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM quizzes %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
+		SELECT
+			id, tenant_id, course_id, class_id, created_by_tutor_id, title, instructions,
 			questions, total_marks, time_limit, availability_start, availability_end,
 			status, show_before_window, allow_retake, passing_percentage,
 			created_at, updated_at, published_at
@@ -374,6 +432,7 @@ func (r *QuizRepository) scanQuiz(row *sql.Row) (*domain.Quiz, error) {
 		&q.ID,
 		&q.TenantID,
 		&q.CourseID,
+		&q.ClassID,
 		&q.CreatedByTutorID,
 		&q.Title,
 		&q.Instructions,
@@ -420,6 +479,7 @@ func (r *QuizRepository) scanQuizFromRows(rows *sql.Rows) (*domain.Quiz, error) 
 		&q.ID,
 		&q.TenantID,
 		&q.CourseID,
+		&q.ClassID,
 		&q.CreatedByTutorID,
 		&q.Title,
 		&q.Instructions,
@@ -578,7 +638,7 @@ func (r *QuizRepository) scanSubmissionFromRows(rows *sql.Rows) (*domain.QuizSub
 func (r *QuizRepository) ListByAvailabilityEndRange(ctx context.Context, start, end time.Time) ([]*domain.Quiz, error) {
 	query := `
 		SELECT
-			id, tenant_id, course_id, created_by_tutor_id, title, instructions,
+			id, tenant_id, course_id, class_id, created_by_tutor_id, title, instructions,
 			questions, total_marks, time_limit, availability_start, availability_end,
 			status, show_before_window, allow_retake, passing_percentage,
 			created_at, updated_at, published_at

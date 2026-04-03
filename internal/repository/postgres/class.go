@@ -308,6 +308,82 @@ func (r *ClassRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID, 
 	return classes, total, nil
 }
 
+// ListByTutor retrieves classes that have courses assigned to a tutor
+func (r *ClassRepository) ListByTutor(ctx context.Context, tenantID uuid.UUID, tutorID uuid.UUID, params repository.PaginationParams) ([]*domain.Class, int, error) {
+	if err := repository.ValidatePaginationParams(&params); err != nil {
+		return nil, 0, err
+	}
+
+	// Get total count of distinct classes where tutor has assigned courses
+	countQuery := `
+		SELECT COUNT(DISTINCT c.id)
+		FROM classes c
+		INNER JOIN courses co ON co.class_id = c.id
+		WHERE c.tenant_id = $1 AND co.assigned_tutor_id = $2
+	`
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, tenantID, tutorID).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
+		SELECT DISTINCT
+			c.id, c.tenant_id, c.session_id, c.name, c.arm, c.level,
+			c.capacity, c.status, c.description, c.created_at, c.updated_at
+		FROM classes c
+		INNER JOIN courses co ON co.class_id = c.id
+		WHERE c.tenant_id = $1 AND co.assigned_tutor_id = $2
+		ORDER BY c.id %s
+		LIMIT $3 OFFSET $4
+	`, params.SortOrder)
+
+	rows, err := r.GetDB().QueryContext(ctx, query, tenantID, tutorID, params.Limit, params.Offset())
+	if err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+	defer rows.Close()
+
+	classes := make([]*domain.Class, 0)
+	for rows.Next() {
+		var class domain.Class
+		var capacity sql.NullInt32
+		var description sql.NullString
+
+		err := rows.Scan(
+			&class.ID,
+			&class.TenantID,
+			&class.SessionID,
+			&class.Name,
+			&class.Arm,
+			&class.Level,
+			&capacity,
+			&class.Status,
+			&description,
+			&class.CreatedAt,
+			&class.UpdatedAt,
+		)
+
+		if err != nil {
+			return nil, 0, repository.ParseError(err)
+		}
+
+		if capacity.Valid {
+			cap := int(capacity.Int32)
+			class.Capacity = &cap
+		}
+		class.Description = repository.FromNullString(description)
+
+		classes = append(classes, &class)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	return classes, total, nil
+}
+
 // ValidateTenantAccess validates that a class belongs to a tenant
 func (r *ClassRepository) ValidateTenantAccess(ctx context.Context, tenantID uuid.UUID, classID uuid.UUID) error {
 	query := `SELECT 1 FROM classes WHERE id = $1 AND tenant_id = $2`

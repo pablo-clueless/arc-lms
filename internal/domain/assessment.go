@@ -63,6 +63,7 @@ type Quiz struct {
 	ID                    uuid.UUID        `json:"id" validate:"required,uuid"`
 	TenantID              uuid.UUID        `json:"tenant_id" validate:"required,uuid"`
 	CourseID              uuid.UUID        `json:"course_id" validate:"required,uuid"`
+	ClassID               uuid.UUID        `json:"class_id" validate:"required,uuid"`
 	CreatedByTutorID      uuid.UUID        `json:"created_by_tutor_id" validate:"required,uuid"`
 	Title                 string           `json:"title" validate:"required,min=3,max=200"`
 	Instructions          string           `json:"instructions" validate:"required,min=10,max=2000"`
@@ -103,6 +104,7 @@ type Assignment struct {
 	ID                   uuid.UUID        `json:"id" validate:"required,uuid"`
 	TenantID             uuid.UUID        `json:"tenant_id" validate:"required,uuid"`
 	CourseID             uuid.UUID        `json:"course_id" validate:"required,uuid"`
+	ClassID              uuid.UUID        `json:"class_id" validate:"required,uuid"`
 	CreatedByTutorID     uuid.UUID        `json:"created_by_tutor_id" validate:"required,uuid"`
 	Title                string           `json:"title" validate:"required,min=3,max=200"`
 	Description          string           `json:"description" validate:"required,min=10,max=5000"`

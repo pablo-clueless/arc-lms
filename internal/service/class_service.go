@@ -214,13 +214,16 @@ func (s *ClassService) ListClasses(
 	ctx context.Context,
 	tenantID uuid.UUID,
 	sessionID *uuid.UUID,
+	tutorID *uuid.UUID,
 	params repository.PaginationParams,
 ) ([]*domain.Class, *repository.PaginatedResult, error) {
 	var classes []*domain.Class
 	var total int
 	var err error
 
-	if sessionID != nil {
+	if tutorID != nil {
+		classes, total, err = s.classRepo.ListByTutor(ctx, tenantID, *tutorID, params)
+	} else if sessionID != nil {
 		classes, total, err = s.classRepo.ListBySession(ctx, *sessionID, params)
 	} else {
 		classes, total, err = s.classRepo.ListByTenant(ctx, tenantID, params)

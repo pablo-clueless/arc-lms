@@ -47,6 +47,7 @@ type Examination struct {
 	ID                uuid.UUID         `json:"id" validate:"required,uuid"`
 	TenantID          uuid.UUID         `json:"tenant_id" validate:"required,uuid"`
 	CourseID          uuid.UUID         `json:"course_id" validate:"required,uuid"`
+	ClassID           uuid.UUID         `json:"class_id" validate:"required,uuid"`
 	TermID            uuid.UUID         `json:"term_id" validate:"required,uuid"`
 	CreatedByID       uuid.UUID         `json:"created_by_id" validate:"required,uuid"` // ADMIN or Tutor
 	Title             string            `json:"title" validate:"required,min=3,max=200"`

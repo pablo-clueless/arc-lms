@@ -33,11 +33,11 @@ func (r *ExaminationRepository) Create(ctx context.Context, exam *domain.Examina
 
 	query := `
 		INSERT INTO examinations (
-			id, tenant_id, course_id, term_id, created_by_id,
+			id, tenant_id, course_id, class_id, term_id, created_by_id,
 			title, instructions, questions, total_marks, duration,
 			window_start, window_end, status, results_published,
 			created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 	`
 
 	execer := repository.GetExecer(r.GetDB(), tx)
@@ -45,6 +45,7 @@ func (r *ExaminationRepository) Create(ctx context.Context, exam *domain.Examina
 		exam.ID,
 		exam.TenantID,
 		exam.CourseID,
+		exam.ClassID,
 		exam.TermID,
 		exam.CreatedByID,
 		exam.Title,
@@ -71,7 +72,7 @@ func (r *ExaminationRepository) Create(ctx context.Context, exam *domain.Examina
 func (r *ExaminationRepository) Get(ctx context.Context, id uuid.UUID) (*domain.Examination, error) {
 	query := `
 		SELECT
-			id, tenant_id, course_id, term_id, created_by_id,
+			id, tenant_id, course_id, class_id, term_id, created_by_id,
 			title, instructions, questions, total_marks, duration,
 			window_start, window_end, status, results_published,
 			results_published_at, results_published_by,
@@ -94,6 +95,7 @@ func (r *ExaminationRepository) scanExamination(row *sql.Row) (*domain.Examinati
 		&exam.ID,
 		&exam.TenantID,
 		&exam.CourseID,
+		&exam.ClassID,
 		&exam.TermID,
 		&exam.CreatedByID,
 		&exam.Title,
@@ -245,7 +247,7 @@ func (r *ExaminationRepository) ListByCourse(ctx context.Context, courseID uuid.
 	// Get paginated results
 	query := fmt.Sprintf(`
 		SELECT
-			id, tenant_id, course_id, term_id, created_by_id,
+			id, tenant_id, course_id, class_id, term_id, created_by_id,
 			title, instructions, questions, total_marks, duration,
 			window_start, window_end, status, results_published,
 			results_published_at, results_published_by,
@@ -280,7 +282,7 @@ func (r *ExaminationRepository) ListByTerm(ctx context.Context, termID uuid.UUID
 	// Get paginated results
 	query := fmt.Sprintf(`
 		SELECT
-			id, tenant_id, course_id, term_id, created_by_id,
+			id, tenant_id, course_id, class_id, term_id, created_by_id,
 			title, instructions, questions, total_marks, duration,
 			window_start, window_end, status, results_published,
 			results_published_at, results_published_by,
@@ -326,7 +328,55 @@ func (r *ExaminationRepository) ListByTenant(ctx context.Context, tenantID uuid.
 	// Get paginated results
 	query := fmt.Sprintf(`
 		SELECT
-			id, tenant_id, course_id, term_id, created_by_id,
+			id, tenant_id, course_id, class_id, term_id, created_by_id,
+			title, instructions, questions, total_marks, duration,
+			window_start, window_end, status, results_published,
+			results_published_at, results_published_by,
+			created_at, updated_at, scheduled_at
+		FROM examinations
+		%s
+		ORDER BY created_at %s
+		LIMIT $%d OFFSET $%d
+	`, whereClause, params.SortOrder, argIndex, argIndex+1)
+
+	args = append(args, params.Limit, params.Offset())
+
+	exams, err := r.queryExaminations(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return exams, total, nil
+}
+
+// ListByClass retrieves examinations for a class
+func (r *ExaminationRepository) ListByClass(ctx context.Context, classID uuid.UUID, status *domain.ExaminationStatus, params repository.PaginationParams) ([]*domain.Examination, int, error) {
+	if err := repository.ValidatePaginationParams(&params); err != nil {
+		return nil, 0, err
+	}
+
+	// Build WHERE clause
+	whereClause := "WHERE class_id = $1"
+	args := []interface{}{classID}
+	argIndex := 2
+
+	if status != nil {
+		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
+		args = append(args, *status)
+		argIndex++
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM examinations %s", whereClause)
+	var total int
+	if err := r.GetDB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, repository.ParseError(err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
+		SELECT
+			id, tenant_id, course_id, class_id, term_id, created_by_id,
 			title, instructions, questions, total_marks, duration,
 			window_start, window_end, status, results_published,
 			results_published_at, results_published_by,
@@ -352,7 +402,7 @@ func (r *ExaminationRepository) GetActiveExaminations(ctx context.Context, tenan
 	now := time.Now()
 	query := `
 		SELECT
-			id, tenant_id, course_id, term_id, created_by_id,
+			id, tenant_id, course_id, class_id, term_id, created_by_id,
 			title, instructions, questions, total_marks, duration,
 			window_start, window_end, status, results_published,
 			results_published_at, results_published_by,
@@ -387,6 +437,7 @@ func (r *ExaminationRepository) queryExaminations(ctx context.Context, query str
 			&exam.ID,
 			&exam.TenantID,
 			&exam.CourseID,
+			&exam.ClassID,
 			&exam.TermID,
 			&exam.CreatedByID,
 			&exam.Title,
@@ -935,7 +986,7 @@ func (r *ExaminationRepository) HasSubmissionIntegrityIssues(ctx context.Context
 func (r *ExaminationRepository) ListByWindowStart(ctx context.Context, start, end time.Time) ([]*domain.Examination, error) {
 	query := `
 		SELECT
-			id, tenant_id, course_id, term_id, created_by_id,
+			id, tenant_id, course_id, class_id, term_id, created_by_id,
 			title, instructions, questions, total_marks, duration,
 			window_start, window_end, status, results_published,
 			results_published_at, results_published_by,
@@ -952,7 +1003,7 @@ func (r *ExaminationRepository) ListByWindowStart(ctx context.Context, start, en
 func (r *ExaminationRepository) ListByWindowEnd(ctx context.Context, start, end time.Time) ([]*domain.Examination, error) {
 	query := `
 		SELECT
-			id, tenant_id, course_id, term_id, created_by_id,
+			id, tenant_id, course_id, class_id, term_id, created_by_id,
 			title, instructions, questions, total_marks, duration,
 			window_start, window_end, status, results_published,
 			results_published_at, results_published_by,

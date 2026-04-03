@@ -101,6 +101,7 @@ func (s *ExaminationService) CreateExamination(
 		ID:               uuid.New(),
 		TenantID:         tenantID,
 		CourseID:         req.CourseID,
+		ClassID:          course.ClassID,
 		TermID:           req.TermID,
 		CreatedByID:      actorID,
 		Title:            req.Title,
@@ -317,6 +318,7 @@ func (s *ExaminationService) ListExaminations(
 	ctx context.Context,
 	tenantID uuid.UUID,
 	courseID *uuid.UUID,
+	classID *uuid.UUID,
 	termID *uuid.UUID,
 	status *domain.ExaminationStatus,
 	params repository.PaginationParams,
@@ -327,6 +329,8 @@ func (s *ExaminationService) ListExaminations(
 
 	if courseID != nil {
 		exams, total, err = s.examRepo.ListByCourse(ctx, *courseID, params)
+	} else if classID != nil {
+		exams, total, err = s.examRepo.ListByClass(ctx, *classID, status, params)
 	} else if termID != nil {
 		exams, total, err = s.examRepo.ListByTerm(ctx, *termID, params)
 	} else {

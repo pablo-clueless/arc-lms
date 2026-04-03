@@ -73,6 +73,7 @@ func (s *AssessmentService) CreateQuiz(ctx context.Context, tenantID, tutorID uu
 		ID:                uuid.New(),
 		TenantID:          tenantID,
 		CourseID:          req.CourseID,
+		ClassID:           course.ClassID,
 		CreatedByTutorID:  tutorID,
 		Title:             req.Title,
 		Instructions:      req.Instructions,
@@ -178,6 +179,16 @@ func (s *AssessmentService) DeleteQuiz(ctx context.Context, id uuid.UUID) error 
 // ListQuizzesByCourse lists quizzes for a course
 func (s *AssessmentService) ListQuizzesByCourse(ctx context.Context, courseID uuid.UUID, status *domain.AssessmentStatus, params repository.PaginationParams) ([]*domain.Quiz, *repository.PaginatedResult, error) {
 	quizzes, total, err := s.quizRepo.ListByCourse(ctx, courseID, status, params)
+	if err != nil {
+		return nil, nil, err
+	}
+	pagination := repository.BuildPaginatedResult(total, params)
+	return quizzes, &pagination, nil
+}
+
+// ListQuizzesByClass lists quizzes for a class
+func (s *AssessmentService) ListQuizzesByClass(ctx context.Context, classID uuid.UUID, status *domain.AssessmentStatus, params repository.PaginationParams) ([]*domain.Quiz, *repository.PaginatedResult, error) {
+	quizzes, total, err := s.quizRepo.ListByClass(ctx, classID, status, params)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -444,6 +455,7 @@ func (s *AssessmentService) CreateAssignment(ctx context.Context, tenantID, tuto
 		ID:                  uuid.New(),
 		TenantID:            tenantID,
 		CourseID:            req.CourseID,
+		ClassID:             course.ClassID,
 		CreatedByTutorID:    tutorID,
 		Title:               req.Title,
 		Description:         req.Description,
@@ -545,6 +557,16 @@ func (s *AssessmentService) DeleteAssignment(ctx context.Context, id uuid.UUID) 
 // ListAssignmentsByCourse lists assignments for a course
 func (s *AssessmentService) ListAssignmentsByCourse(ctx context.Context, courseID uuid.UUID, status *domain.AssessmentStatus, params repository.PaginationParams) ([]*domain.Assignment, *repository.PaginatedResult, error) {
 	assignments, total, err := s.assignmentRepo.ListByCourse(ctx, courseID, status, params)
+	if err != nil {
+		return nil, nil, err
+	}
+	pagination := repository.BuildPaginatedResult(total, params)
+	return assignments, &pagination, nil
+}
+
+// ListAssignmentsByClass lists assignments for a class
+func (s *AssessmentService) ListAssignmentsByClass(ctx context.Context, classID uuid.UUID, status *domain.AssessmentStatus, params repository.PaginationParams) ([]*domain.Assignment, *repository.PaginatedResult, error) {
+	assignments, total, err := s.assignmentRepo.ListByClass(ctx, classID, status, params)
 	if err != nil {
 		return nil, nil, err
 	}
