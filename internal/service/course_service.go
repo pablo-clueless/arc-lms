@@ -118,6 +118,9 @@ func (s *CourseService) CreateCourse(
 		return nil, fmt.Errorf("failed to create course: %w", err)
 	}
 
+	// Attach tutor information to response
+	course.AssignedTutor = domain.TutorInfoFromUser(tutor)
+
 	// Audit log
 	_ = s.auditService.LogAction(
 		ctx,
@@ -141,6 +144,12 @@ func (s *CourseService) GetCourse(ctx context.Context, id uuid.UUID) (*domain.Co
 	if err != nil {
 		return nil, fmt.Errorf("failed to get course: %w", err)
 	}
+
+	// Fetch and attach tutor information
+	if tutor, err := s.userRepo.GetByID(ctx, course.AssignedTutorID); err == nil {
+		course.AssignedTutor = domain.TutorInfoFromUser(tutor)
+	}
+
 	return course, nil
 }
 
@@ -174,6 +183,11 @@ func (s *CourseService) UpdateCourse(
 
 	if err := s.courseRepo.Update(ctx, course, nil); err != nil {
 		return nil, fmt.Errorf("failed to update course: %w", err)
+	}
+
+	// Fetch and attach tutor information
+	if tutor, err := s.userRepo.GetByID(ctx, course.AssignedTutorID); err == nil {
+		course.AssignedTutor = domain.TutorInfoFromUser(tutor)
 	}
 
 	// Audit log
@@ -258,6 +272,18 @@ func (s *CourseService) ListCourses(
 		return nil, nil, fmt.Errorf("failed to list courses: %w", err)
 	}
 
+	// Fetch and attach tutor information for each course
+	tutorCache := make(map[uuid.UUID]*domain.TutorInfo)
+	for _, course := range courses {
+		if tutorInfo, ok := tutorCache[course.AssignedTutorID]; ok {
+			course.AssignedTutor = tutorInfo
+		} else if tutor, err := s.userRepo.GetByID(ctx, course.AssignedTutorID); err == nil {
+			tutorInfo := domain.TutorInfoFromUser(tutor)
+			tutorCache[course.AssignedTutorID] = tutorInfo
+			course.AssignedTutor = tutorInfo
+		}
+	}
+
 	pagination := repository.BuildPaginatedResult(total, params)
 
 	return courses, &pagination, nil
@@ -301,6 +327,9 @@ func (s *CourseService) ReassignTutor(
 	if err := s.courseRepo.Update(ctx, course, nil); err != nil {
 		return nil, fmt.Errorf("failed to reassign tutor: %w", err)
 	}
+
+	// Attach tutor information to response
+	course.AssignedTutor = domain.TutorInfoFromUser(tutor)
 
 	// Audit log
 	_ = s.auditService.LogAction(
@@ -593,6 +622,11 @@ func (s *CourseService) GetCourseWithContents(ctx context.Context, courseID uuid
 	course, err := s.courseRepo.Get(ctx, courseID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get course: %w", err)
+	}
+
+	// Fetch and attach tutor information
+	if tutor, err := s.userRepo.GetByID(ctx, course.AssignedTutorID); err == nil {
+		course.AssignedTutor = domain.TutorInfoFromUser(tutor)
 	}
 
 	contents, _, err := s.courseContentRepo.ListByCourse(ctx, courseID, repository.PaginationParams{Limit: 1000})

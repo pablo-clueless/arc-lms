@@ -45,6 +45,33 @@ type CourseContent struct {
 	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
+// TutorInfo represents the tutor information returned in course responses
+type TutorInfo struct {
+	ID           uuid.UUID  `json:"id"`
+	Email        string     `json:"email"`
+	FirstName    string     `json:"first_name"`
+	LastName     string     `json:"last_name"`
+	MiddleName   *string    `json:"middle_name,omitempty"`
+	ProfilePhoto *string    `json:"profile_photo,omitempty"`
+	Phone        *string    `json:"phone,omitempty"`
+}
+
+// TutorInfoFromUser creates a TutorInfo from a User
+func TutorInfoFromUser(u *User) *TutorInfo {
+	if u == nil {
+		return nil
+	}
+	return &TutorInfo{
+		ID:           u.ID,
+		Email:        u.Email,
+		FirstName:    u.FirstName,
+		LastName:     u.LastName,
+		MiddleName:   u.MiddleName,
+		ProfilePhoto: u.ProfilePhoto,
+		Phone:        u.Phone,
+	}
+}
+
 type Course struct {
 	ID                   uuid.UUID       `json:"id" validate:"required,uuid"`
 	TenantID             uuid.UUID       `json:"tenant_id" validate:"required,uuid"`
@@ -55,6 +82,7 @@ type Course struct {
 	SubjectCode          string          `json:"subject_code" validate:"required,min=2,max=20"`
 	Description          *string         `json:"description,omitempty" validate:"omitempty,max=1000"`
 	AssignedTutorID      uuid.UUID       `json:"assigned_tutor_id" validate:"required,uuid"`
+	AssignedTutor        *TutorInfo      `json:"assigned_tutor,omitempty"`
 	Status               CourseStatus    `json:"status" validate:"required,oneof=ACTIVE INACTIVE DRAFT"`
 	MaxPeriodsPerWeek    *int            `json:"max_periods_per_week,omitempty" validate:"omitempty,min=1,max=20"`
 	CustomGradeWeighting *GradeWeighting `json:"custom_grade_weighting,omitempty"`

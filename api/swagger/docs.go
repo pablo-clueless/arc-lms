@@ -1767,7 +1767,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/courses/{course_id}/assignments/{id}": {
+        "/courses/{course_id}/assignments/{assignment_id}": {
             "get": {
                 "security": [
                     {
@@ -1785,7 +1785,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Assignment ID",
-                        "name": "id",
+                        "name": "assignment_id",
                         "in": "path",
                         "required": true
                     }
@@ -1819,7 +1819,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Assignment ID",
-                        "name": "id",
+                        "name": "assignment_id",
                         "in": "path",
                         "required": true
                     },
@@ -1856,7 +1856,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Assignment ID",
-                        "name": "id",
+                        "name": "assignment_id",
                         "in": "path",
                         "required": true
                     }
@@ -1872,7 +1872,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/courses/{course_id}/assignments/{id}/publish": {
+        "/courses/{course_id}/assignments/{assignment_id}/publish": {
             "post": {
                 "security": [
                     {
@@ -1887,7 +1887,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Assignment ID",
-                        "name": "id",
+                        "name": "assignment_id",
                         "in": "path",
                         "required": true
                     }
@@ -1902,7 +1902,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/courses/{course_id}/assignments/{id}/submissions": {
+        "/courses/{course_id}/assignments/{assignment_id}/submissions": {
             "get": {
                 "security": [
                     {
@@ -1920,7 +1920,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Assignment ID",
-                        "name": "id",
+                        "name": "assignment_id",
                         "in": "path",
                         "required": true
                     },
@@ -1948,7 +1948,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/courses/{course_id}/assignments/{id}/submissions/{submission_id}/grade": {
+        "/courses/{course_id}/assignments/{assignment_id}/submissions/{submission_id}/grade": {
             "post": {
                 "security": [
                     {
@@ -1969,7 +1969,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Assignment ID",
-                        "name": "id",
+                        "name": "assignment_id",
                         "in": "path",
                         "required": true
                     },
@@ -2000,7 +2000,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/courses/{course_id}/assignments/{id}/submit": {
+        "/courses/{course_id}/assignments/{assignment_id}/submit": {
             "post": {
                 "security": [
                     {
@@ -2021,7 +2021,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Assignment ID",
-                        "name": "id",
+                        "name": "assignment_id",
                         "in": "path",
                         "required": true
                     },
@@ -2138,7 +2138,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/courses/{course_id}/quizzes/{id}": {
+        "/courses/{course_id}/quizzes/{quiz_id}": {
             "get": {
                 "security": [
                     {
@@ -2156,7 +2156,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Quiz ID",
-                        "name": "id",
+                        "name": "quiz_id",
                         "in": "path",
                         "required": true
                     }
@@ -2190,7 +2190,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Quiz ID",
-                        "name": "id",
+                        "name": "quiz_id",
                         "in": "path",
                         "required": true
                     },
@@ -2227,7 +2227,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Quiz ID",
-                        "name": "id",
+                        "name": "quiz_id",
                         "in": "path",
                         "required": true
                     }
@@ -2243,7 +2243,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/courses/{course_id}/quizzes/{id}/publish": {
+        "/courses/{course_id}/quizzes/{quiz_id}/publish": {
             "post": {
                 "security": [
                     {
@@ -2258,7 +2258,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Quiz ID",
-                        "name": "id",
+                        "name": "quiz_id",
                         "in": "path",
                         "required": true
                     }
@@ -2273,7 +2273,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/courses/{course_id}/quizzes/{id}/start": {
+        "/courses/{course_id}/quizzes/{quiz_id}/start": {
             "post": {
                 "security": [
                     {
@@ -2288,7 +2288,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Quiz ID",
-                        "name": "id",
+                        "name": "quiz_id",
                         "in": "path",
                         "required": true
                     }
@@ -2303,7 +2303,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/courses/{course_id}/quizzes/{id}/submissions": {
+        "/courses/{course_id}/quizzes/{quiz_id}/submissions": {
             "get": {
                 "security": [
                     {
@@ -2321,7 +2321,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Quiz ID",
-                        "name": "id",
+                        "name": "quiz_id",
                         "in": "path",
                         "required": true
                     },
@@ -2349,7 +2349,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/courses/{course_id}/quizzes/{id}/submissions/{submission_id}/grade": {
+        "/courses/{course_id}/quizzes/{quiz_id}/submissions/{submission_id}/grade": {
             "post": {
                 "security": [
                     {
@@ -2370,7 +2370,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Quiz ID",
-                        "name": "id",
+                        "name": "quiz_id",
                         "in": "path",
                         "required": true
                     },
@@ -2401,7 +2401,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/courses/{course_id}/quizzes/{id}/submit": {
+        "/courses/{course_id}/quizzes/{quiz_id}/submit": {
             "post": {
                 "security": [
                     {
@@ -2422,7 +2422,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Quiz ID",
-                        "name": "id",
+                        "name": "quiz_id",
                         "in": "path",
                         "required": true
                     },
@@ -14660,6 +14660,7 @@ const docTemplate = `{
         "service.CreateAssignmentRequest": {
             "type": "object",
             "required": [
+                "class_id",
                 "course_id",
                 "description",
                 "max_file_size",
@@ -14682,6 +14683,9 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "class_id": {
+                    "type": "string"
                 },
                 "course_id": {
                     "type": "string"
@@ -14850,6 +14854,7 @@ const docTemplate = `{
         "service.CreateExaminationRequest": {
             "type": "object",
             "required": [
+                "class_id",
                 "course_id",
                 "duration",
                 "instructions",
@@ -14861,6 +14866,9 @@ const docTemplate = `{
                 "window_start"
             ],
             "properties": {
+                "class_id": {
+                    "type": "string"
+                },
                 "course_id": {
                     "type": "string"
                 },
@@ -14906,6 +14914,7 @@ const docTemplate = `{
             "required": [
                 "availability_end",
                 "availability_start",
+                "class_id",
                 "course_id",
                 "instructions",
                 "questions",
@@ -14920,6 +14929,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "availability_start": {
+                    "type": "string"
+                },
+                "class_id": {
                     "type": "string"
                 },
                 "course_id": {

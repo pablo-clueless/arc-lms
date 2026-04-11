@@ -270,13 +270,14 @@ func (r *AssignmentRepository) ListByClass(ctx context.Context, classID uuid.UUI
 // CreateSubmission creates an assignment submission
 func (r *AssignmentRepository) CreateSubmission(ctx context.Context, submission *domain.AssignmentSubmission) error {
 	fileURLsJSON, _ := json.Marshal(submission.FileURLs)
+	answersJSON, _ := json.Marshal(submission.Answers)
 
 	query := `
 		INSERT INTO assignment_submissions (
 			id, tenant_id, assignment_id, student_id, status, submitted_at,
-			is_late, file_urls, answer_text, score, feedback, ip_address,
+			is_late, file_urls, answers, answer_text, score, feedback, ip_address,
 			created_at, updated_at, graded_at, graded_by
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 	`
 
 	_, err := r.GetDB().ExecContext(ctx, query,
@@ -288,6 +289,7 @@ func (r *AssignmentRepository) CreateSubmission(ctx context.Context, submission 
 		submission.SubmittedAt,
 		submission.IsLate,
 		fileURLsJSON,
+		answersJSON,
 		repository.ToNullString(submission.AnswerText),
 		submission.Score,
 		repository.ToNullString(submission.Feedback),
@@ -310,7 +312,7 @@ func (r *AssignmentRepository) GetSubmissionByID(ctx context.Context, id uuid.UU
 	query := `
 		SELECT
 			id, tenant_id, assignment_id, student_id, status, submitted_at,
-			is_late, file_urls, answer_text, score, feedback, ip_address,
+			is_late, file_urls, answers, answer_text, score, feedback, ip_address,
 			created_at, updated_at, graded_at, graded_by
 		FROM assignment_submissions
 		WHERE id = $1
@@ -324,7 +326,7 @@ func (r *AssignmentRepository) GetSubmissionByAssignmentAndStudent(ctx context.C
 	query := `
 		SELECT
 			id, tenant_id, assignment_id, student_id, status, submitted_at,
-			is_late, file_urls, answer_text, score, feedback, ip_address,
+			is_late, file_urls, answers, answer_text, score, feedback, ip_address,
 			created_at, updated_at, graded_at, graded_by
 		FROM assignment_submissions
 		WHERE assignment_id = $1 AND student_id = $2
@@ -336,12 +338,13 @@ func (r *AssignmentRepository) GetSubmissionByAssignmentAndStudent(ctx context.C
 // UpdateSubmission updates an assignment submission
 func (r *AssignmentRepository) UpdateSubmission(ctx context.Context, submission *domain.AssignmentSubmission) error {
 	fileURLsJSON, _ := json.Marshal(submission.FileURLs)
+	answersJSON, _ := json.Marshal(submission.Answers)
 
 	query := `
 		UPDATE assignment_submissions SET
 			status = $2, submitted_at = $3, is_late = $4, file_urls = $5,
-			answer_text = $6, score = $7, feedback = $8,
-			updated_at = $9, graded_at = $10, graded_by = $11
+			answers = $6, answer_text = $7, score = $8, feedback = $9,
+			updated_at = $10, graded_at = $11, graded_by = $12
 		WHERE id = $1
 	`
 
@@ -351,6 +354,7 @@ func (r *AssignmentRepository) UpdateSubmission(ctx context.Context, submission 
 		submission.SubmittedAt,
 		submission.IsLate,
 		fileURLsJSON,
+		answersJSON,
 		repository.ToNullString(submission.AnswerText),
 		submission.Score,
 		repository.ToNullString(submission.Feedback),
@@ -388,7 +392,7 @@ func (r *AssignmentRepository) ListSubmissionsByAssignment(ctx context.Context, 
 	query := fmt.Sprintf(`
 		SELECT
 			id, tenant_id, assignment_id, student_id, status, submitted_at,
-			is_late, file_urls, answer_text, score, feedback, ip_address,
+			is_late, file_urls, answers, answer_text, score, feedback, ip_address,
 			created_at, updated_at, graded_at, graded_by
 		FROM assignment_submissions
 		WHERE assignment_id = $1
@@ -510,7 +514,7 @@ func (r *AssignmentRepository) scanAssignmentFromRows(rows *sql.Rows) (*domain.A
 
 func (r *AssignmentRepository) scanSubmission(row *sql.Row) (*domain.AssignmentSubmission, error) {
 	var s domain.AssignmentSubmission
-	var fileURLsJSON []byte
+	var fileURLsJSON, answersJSON []byte
 	var submittedAt, gradedAt sql.NullTime
 	var score sql.NullInt64
 	var answerText, feedback, ipAddress, gradedBy sql.NullString
@@ -524,6 +528,7 @@ func (r *AssignmentRepository) scanSubmission(row *sql.Row) (*domain.AssignmentS
 		&submittedAt,
 		&s.IsLate,
 		&fileURLsJSON,
+		&answersJSON,
 		&answerText,
 		&score,
 		&feedback,
@@ -539,6 +544,7 @@ func (r *AssignmentRepository) scanSubmission(row *sql.Row) (*domain.AssignmentS
 	}
 
 	json.Unmarshal(fileURLsJSON, &s.FileURLs)
+	json.Unmarshal(answersJSON, &s.Answers)
 
 	if submittedAt.Valid {
 		s.SubmittedAt = &submittedAt.Time
@@ -560,7 +566,7 @@ func (r *AssignmentRepository) scanSubmission(row *sql.Row) (*domain.AssignmentS
 
 func (r *AssignmentRepository) scanSubmissionFromRows(rows *sql.Rows) (*domain.AssignmentSubmission, error) {
 	var s domain.AssignmentSubmission
-	var fileURLsJSON []byte
+	var fileURLsJSON, answersJSON []byte
 	var submittedAt, gradedAt sql.NullTime
 	var score sql.NullInt64
 	var answerText, feedback, ipAddress, gradedBy sql.NullString
@@ -574,6 +580,7 @@ func (r *AssignmentRepository) scanSubmissionFromRows(rows *sql.Rows) (*domain.A
 		&submittedAt,
 		&s.IsLate,
 		&fileURLsJSON,
+		&answersJSON,
 		&answerText,
 		&score,
 		&feedback,
@@ -589,6 +596,7 @@ func (r *AssignmentRepository) scanSubmissionFromRows(rows *sql.Rows) (*domain.A
 	}
 
 	json.Unmarshal(fileURLsJSON, &s.FileURLs)
+	json.Unmarshal(answersJSON, &s.Answers)
 
 	if submittedAt.Valid {
 		s.SubmittedAt = &submittedAt.Time

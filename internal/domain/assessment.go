@@ -201,7 +201,8 @@ type AssignmentSubmission struct {
 	SubmittedAt    *time.Time       `json:"submitted_at,omitempty"`
 	IsLate         bool             `json:"is_late"`
 	FileURLs       []string         `json:"file_urls,omitempty"`
-	AnswerText     *string          `json:"answer_text,omitempty" validate:"omitempty,max=10000"` // For text-based submissions
+	Answers        []Answer         `json:"answers,omitempty"`               // Per-question answers for structured assignments
+	AnswerText     *string          `json:"answer_text,omitempty" validate:"omitempty,max=10000"` // For unstructured text-based submissions
 	Score          *int             `json:"score,omitempty"`
 	Feedback       *string          `json:"feedback,omitempty" validate:"omitempty,max=2000"`
 	IPAddress      *string          `json:"ip_address,omitempty"`
