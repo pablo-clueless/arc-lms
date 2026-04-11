@@ -38,6 +38,7 @@ func NewAssessmentService(
 // CreateQuizRequest represents a request to create a quiz
 type CreateQuizRequest struct {
 	CourseID          uuid.UUID         `json:"course_id" validate:"required"`
+	ClassID           uuid.UUID         `json:"class_id" validate:"required"`
 	Title             string            `json:"title" validate:"required,min=3,max=200"`
 	Instructions      string            `json:"instructions" validate:"required,min=10,max=2000"`
 	Questions         []domain.Question `json:"questions" validate:"required,min=1"`
@@ -73,7 +74,7 @@ func (s *AssessmentService) CreateQuiz(ctx context.Context, tenantID, tutorID uu
 		ID:                uuid.New(),
 		TenantID:          tenantID,
 		CourseID:          req.CourseID,
-		ClassID:           course.ClassID,
+		ClassID:           req.ClassID,
 		CreatedByTutorID:  tutorID,
 		Title:             req.Title,
 		Instructions:      req.Instructions,
@@ -421,6 +422,7 @@ func (s *AssessmentService) ListQuizSubmissions(ctx context.Context, quizID uuid
 // CreateAssignmentRequest represents a request to create an assignment
 type CreateAssignmentRequest struct {
 	CourseID            uuid.UUID         `json:"course_id" validate:"required"`
+	ClassID             uuid.UUID         `json:"class_id" validate:"required"`
 	Title               string            `json:"title" validate:"required,min=3,max=200"`
 	Description         string            `json:"description" validate:"required,min=10,max=5000"`
 	AttachmentURLs      []string          `json:"attachment_urls,omitempty"`
@@ -455,7 +457,7 @@ func (s *AssessmentService) CreateAssignment(ctx context.Context, tenantID, tuto
 		ID:                  uuid.New(),
 		TenantID:            tenantID,
 		CourseID:            req.CourseID,
-		ClassID:             course.ClassID,
+		ClassID:             req.ClassID,
 		CreatedByTutorID:    tutorID,
 		Title:               req.Title,
 		Description:         req.Description,
@@ -576,8 +578,9 @@ func (s *AssessmentService) ListAssignmentsByClass(ctx context.Context, classID 
 
 // SubmitAssignmentRequest represents an assignment submission
 type SubmitAssignmentRequest struct {
-	FileURLs   []string `json:"file_urls,omitempty"`
-	AnswerText *string  `json:"answer_text,omitempty"`
+	Answers    []domain.Answer `json:"answers,omitempty"`
+	FileURLs   []string        `json:"file_urls,omitempty"`
+	AnswerText *string         `json:"answer_text,omitempty"`
 }
 
 // SubmitAssignment submits an assignment
@@ -613,6 +616,7 @@ func (s *AssessmentService) SubmitAssignment(ctx context.Context, assignmentID, 
 		SubmittedAt:  &now,
 		IsLate:       isLate,
 		FileURLs:     req.FileURLs,
+		Answers:      req.Answers,
 		AnswerText:   req.AnswerText,
 		IPAddress:    &ipAddress,
 		CreatedAt:    now,
