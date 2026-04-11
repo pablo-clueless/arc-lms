@@ -135,11 +135,11 @@ func (h *AssessmentHandler) CreateQuiz(c *gin.Context) {
 // @Tags Quizzes
 // @Security BearerAuth
 // @Produce json
-// @Param id path string true "Quiz ID"
+// @Param quiz_id path string true "Quiz ID"
 // @Success 200 {object} domain.Quiz
-// @Router /courses/{course_id}/quizzes/{id} [get]
+// @Router /courses/{course_id}/quizzes/{quiz_id} [get]
 func (h *AssessmentHandler) GetQuiz(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+	id, err := uuid.Parse(c.Param("quiz_id"))
 	if err != nil {
 		errors.BadRequest(c, "invalid quiz ID", nil)
 		return
@@ -160,12 +160,12 @@ func (h *AssessmentHandler) GetQuiz(c *gin.Context) {
 // @Security BearerAuth
 // @Accept json
 // @Produce json
-// @Param id path string true "Quiz ID"
+// @Param quiz_id path string true "Quiz ID"
 // @Param request body service.CreateQuizRequest true "Quiz data"
 // @Success 200 {object} domain.Quiz
-// @Router /courses/{course_id}/quizzes/{id} [put]
+// @Router /courses/{course_id}/quizzes/{quiz_id} [put]
 func (h *AssessmentHandler) UpdateQuiz(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+	id, err := uuid.Parse(c.Param("quiz_id"))
 	if err != nil {
 		errors.BadRequest(c, "invalid quiz ID", nil)
 		return
@@ -189,11 +189,11 @@ func (h *AssessmentHandler) UpdateQuiz(c *gin.Context) {
 // @Summary Delete a quiz
 // @Tags Quizzes
 // @Security BearerAuth
-// @Param id path string true "Quiz ID"
+// @Param quiz_id path string true "Quiz ID"
 // @Success 200 {object} map[string]interface{}
-// @Router /courses/{course_id}/quizzes/{id} [delete]
+// @Router /courses/{course_id}/quizzes/{quiz_id} [delete]
 func (h *AssessmentHandler) DeleteQuiz(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+	id, err := uuid.Parse(c.Param("quiz_id"))
 	if err != nil {
 		errors.BadRequest(c, "invalid quiz ID", nil)
 		return
@@ -211,11 +211,11 @@ func (h *AssessmentHandler) DeleteQuiz(c *gin.Context) {
 // @Summary Publish a quiz
 // @Tags Quizzes
 // @Security BearerAuth
-// @Param id path string true "Quiz ID"
+// @Param quiz_id path string true "Quiz ID"
 // @Success 200 {object} domain.Quiz
-// @Router /courses/{course_id}/quizzes/{id}/publish [post]
+// @Router /courses/{course_id}/quizzes/{quiz_id}/publish [post]
 func (h *AssessmentHandler) PublishQuiz(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+	id, err := uuid.Parse(c.Param("quiz_id"))
 	if err != nil {
 		errors.BadRequest(c, "invalid quiz ID", nil)
 		return
@@ -234,16 +234,16 @@ func (h *AssessmentHandler) PublishQuiz(c *gin.Context) {
 // @Summary Start a quiz attempt
 // @Tags Quizzes
 // @Security BearerAuth
-// @Param id path string true "Quiz ID"
+// @Param quiz_id path string true "Quiz ID"
 // @Success 200 {object} domain.QuizSubmission
-// @Router /courses/{course_id}/quizzes/{id}/start [post]
+// @Router /courses/{course_id}/quizzes/{quiz_id}/start [post]
 func (h *AssessmentHandler) StartQuiz(c *gin.Context) {
 	_, studentID, ok := h.getTenantAndUserID(c)
 	if !ok {
 		return
 	}
 
-	quizID, err := uuid.Parse(c.Param("id"))
+	quizID, err := uuid.Parse(c.Param("quiz_id"))
 	if err != nil {
 		errors.BadRequest(c, "invalid quiz ID", nil)
 		return
@@ -264,17 +264,17 @@ func (h *AssessmentHandler) StartQuiz(c *gin.Context) {
 // @Security BearerAuth
 // @Accept json
 // @Produce json
-// @Param id path string true "Quiz ID"
+// @Param quiz_id path string true "Quiz ID"
 // @Param request body service.SubmitQuizRequest true "Answers"
 // @Success 200 {object} domain.QuizSubmission
-// @Router /courses/{course_id}/quizzes/{id}/submit [post]
+// @Router /courses/{course_id}/quizzes/{quiz_id}/submit [post]
 func (h *AssessmentHandler) SubmitQuiz(c *gin.Context) {
 	_, studentID, ok := h.getTenantAndUserID(c)
 	if !ok {
 		return
 	}
 
-	quizID, err := uuid.Parse(c.Param("id"))
+	quizID, err := uuid.Parse(c.Param("quiz_id"))
 	if err != nil {
 		errors.BadRequest(c, "invalid quiz ID", nil)
 		return
@@ -325,11 +325,11 @@ func (h *AssessmentHandler) SubmitQuiz(c *gin.Context) {
 // @Security BearerAuth
 // @Accept json
 // @Produce json
-// @Param id path string true "Quiz ID"
+// @Param quiz_id path string true "Quiz ID"
 // @Param submission_id path string true "Submission ID"
 // @Param request body service.GradeQuizRequest true "Grading data"
 // @Success 200 {object} domain.QuizSubmission
-// @Router /courses/{course_id}/quizzes/{id}/submissions/{submission_id}/grade [post]
+// @Router /courses/{course_id}/quizzes/{quiz_id}/submissions/{submission_id}/grade [post]
 func (h *AssessmentHandler) GradeQuiz(c *gin.Context) {
 	_, tutorID, ok := h.getTenantAndUserID(c)
 	if !ok {
@@ -361,13 +361,13 @@ func (h *AssessmentHandler) GradeQuiz(c *gin.Context) {
 // @Tags Quizzes
 // @Security BearerAuth
 // @Produce json
-// @Param id path string true "Quiz ID"
+// @Param quiz_id path string true "Quiz ID"
 // @Param page query int false "Page number"
 // @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
-// @Router /courses/{course_id}/quizzes/{id}/submissions [get]
+// @Router /courses/{course_id}/quizzes/{quiz_id}/submissions [get]
 func (h *AssessmentHandler) ListQuizSubmissions(c *gin.Context) {
-	quizID, err := uuid.Parse(c.Param("id"))
+	quizID, err := uuid.Parse(c.Param("quiz_id"))
 	if err != nil {
 		errors.BadRequest(c, "invalid quiz ID", nil)
 		return
@@ -501,11 +501,11 @@ func (h *AssessmentHandler) CreateAssignment(c *gin.Context) {
 // @Tags Assignments
 // @Security BearerAuth
 // @Produce json
-// @Param id path string true "Assignment ID"
+// @Param assignment_id path string true "Assignment ID"
 // @Success 200 {object} domain.Assignment
-// @Router /courses/{course_id}/assignments/{id} [get]
+// @Router /courses/{course_id}/assignments/{assignment_id} [get]
 func (h *AssessmentHandler) GetAssignment(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+	id, err := uuid.Parse(c.Param("assignment_id"))
 	if err != nil {
 		errors.BadRequest(c, "invalid assignment ID", nil)
 		return
@@ -526,12 +526,12 @@ func (h *AssessmentHandler) GetAssignment(c *gin.Context) {
 // @Security BearerAuth
 // @Accept json
 // @Produce json
-// @Param id path string true "Assignment ID"
+// @Param assignment_id path string true "Assignment ID"
 // @Param request body service.CreateAssignmentRequest true "Assignment data"
 // @Success 200 {object} domain.Assignment
-// @Router /courses/{course_id}/assignments/{id} [put]
+// @Router /courses/{course_id}/assignments/{assignment_id} [put]
 func (h *AssessmentHandler) UpdateAssignment(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+	id, err := uuid.Parse(c.Param("assignment_id"))
 	if err != nil {
 		errors.BadRequest(c, "invalid assignment ID", nil)
 		return
@@ -555,11 +555,11 @@ func (h *AssessmentHandler) UpdateAssignment(c *gin.Context) {
 // @Summary Delete an assignment
 // @Tags Assignments
 // @Security BearerAuth
-// @Param id path string true "Assignment ID"
+// @Param assignment_id path string true "Assignment ID"
 // @Success 200 {object} map[string]interface{}
-// @Router /courses/{course_id}/assignments/{id} [delete]
+// @Router /courses/{course_id}/assignments/{assignment_id} [delete]
 func (h *AssessmentHandler) DeleteAssignment(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+	id, err := uuid.Parse(c.Param("assignment_id"))
 	if err != nil {
 		errors.BadRequest(c, "invalid assignment ID", nil)
 		return
@@ -577,11 +577,11 @@ func (h *AssessmentHandler) DeleteAssignment(c *gin.Context) {
 // @Summary Publish an assignment
 // @Tags Assignments
 // @Security BearerAuth
-// @Param id path string true "Assignment ID"
+// @Param assignment_id path string true "Assignment ID"
 // @Success 200 {object} domain.Assignment
-// @Router /courses/{course_id}/assignments/{id}/publish [post]
+// @Router /courses/{course_id}/assignments/{assignment_id}/publish [post]
 func (h *AssessmentHandler) PublishAssignment(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+	id, err := uuid.Parse(c.Param("assignment_id"))
 	if err != nil {
 		errors.BadRequest(c, "invalid assignment ID", nil)
 		return
@@ -602,17 +602,17 @@ func (h *AssessmentHandler) PublishAssignment(c *gin.Context) {
 // @Security BearerAuth
 // @Accept json
 // @Produce json
-// @Param id path string true "Assignment ID"
+// @Param assignment_id path string true "Assignment ID"
 // @Param request body service.SubmitAssignmentRequest true "Submission data"
 // @Success 200 {object} domain.AssignmentSubmission
-// @Router /courses/{course_id}/assignments/{id}/submit [post]
+// @Router /courses/{course_id}/assignments/{assignment_id}/submit [post]
 func (h *AssessmentHandler) SubmitAssignment(c *gin.Context) {
 	_, studentID, ok := h.getTenantAndUserID(c)
 	if !ok {
 		return
 	}
 
-	assignmentID, err := uuid.Parse(c.Param("id"))
+	assignmentID, err := uuid.Parse(c.Param("assignment_id"))
 	if err != nil {
 		errors.BadRequest(c, "invalid assignment ID", nil)
 		return
@@ -638,11 +638,11 @@ func (h *AssessmentHandler) SubmitAssignment(c *gin.Context) {
 // @Security BearerAuth
 // @Accept json
 // @Produce json
-// @Param id path string true "Assignment ID"
+// @Param assignment_id path string true "Assignment ID"
 // @Param submission_id path string true "Submission ID"
 // @Param request body service.GradeAssignmentRequest true "Grading data"
 // @Success 200 {object} domain.AssignmentSubmission
-// @Router /courses/{course_id}/assignments/{id}/submissions/{submission_id}/grade [post]
+// @Router /courses/{course_id}/assignments/{assignment_id}/submissions/{submission_id}/grade [post]
 func (h *AssessmentHandler) GradeAssignment(c *gin.Context) {
 	_, tutorID, ok := h.getTenantAndUserID(c)
 	if !ok {
@@ -674,13 +674,13 @@ func (h *AssessmentHandler) GradeAssignment(c *gin.Context) {
 // @Tags Assignments
 // @Security BearerAuth
 // @Produce json
-// @Param id path string true "Assignment ID"
+// @Param assignment_id path string true "Assignment ID"
 // @Param page query int false "Page number"
 // @Param limit query int false "Number of results"
 // @Success 200 {object} map[string]interface{}
-// @Router /courses/{course_id}/assignments/{id}/submissions [get]
+// @Router /courses/{course_id}/assignments/{assignment_id}/submissions [get]
 func (h *AssessmentHandler) ListAssignmentSubmissions(c *gin.Context) {
-	assignmentID, err := uuid.Parse(c.Param("id"))
+	assignmentID, err := uuid.Parse(c.Param("assignment_id"))
 	if err != nil {
 		errors.BadRequest(c, "invalid assignment ID", nil)
 		return

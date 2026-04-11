@@ -3409,6 +3409,8 @@ definitions:
         items:
           type: string
         type: array
+      class_id:
+        type: string
       course_id:
         type: string
       description:
@@ -3436,6 +3438,7 @@ definitions:
         minLength: 3
         type: string
     required:
+    - class_id
     - course_id
     - description
     - max_file_size
@@ -3535,6 +3538,8 @@ definitions:
     type: object
   service.CreateExaminationRequest:
     properties:
+      class_id:
+        type: string
       course_id:
         type: string
       duration:
@@ -3564,6 +3569,7 @@ definitions:
       window_start:
         type: string
     required:
+    - class_id
     - course_id
     - duration
     - instructions
@@ -3581,6 +3587,8 @@ definitions:
       availability_end:
         type: string
       availability_start:
+        type: string
+      class_id:
         type: string
       course_id:
         type: string
@@ -3608,6 +3616,7 @@ definitions:
     required:
     - availability_end
     - availability_start
+    - class_id
     - course_id
     - instructions
     - questions
@@ -5662,12 +5671,12 @@ paths:
       summary: Create an assignment
       tags:
       - Assignments
-  /courses/{course_id}/assignments/{id}:
+  /courses/{course_id}/assignments/{assignment_id}:
     delete:
       parameters:
       - description: Assignment ID
         in: path
-        name: id
+        name: assignment_id
         required: true
         type: string
       responses:
@@ -5685,7 +5694,7 @@ paths:
       parameters:
       - description: Assignment ID
         in: path
-        name: id
+        name: assignment_id
         required: true
         type: string
       produces:
@@ -5706,7 +5715,7 @@ paths:
       parameters:
       - description: Assignment ID
         in: path
-        name: id
+        name: assignment_id
         required: true
         type: string
       - description: Assignment data
@@ -5727,12 +5736,12 @@ paths:
       summary: Update an assignment
       tags:
       - Assignments
-  /courses/{course_id}/assignments/{id}/publish:
+  /courses/{course_id}/assignments/{assignment_id}/publish:
     post:
       parameters:
       - description: Assignment ID
         in: path
-        name: id
+        name: assignment_id
         required: true
         type: string
       responses:
@@ -5745,12 +5754,12 @@ paths:
       summary: Publish an assignment
       tags:
       - Assignments
-  /courses/{course_id}/assignments/{id}/submissions:
+  /courses/{course_id}/assignments/{assignment_id}/submissions:
     get:
       parameters:
       - description: Assignment ID
         in: path
-        name: id
+        name: assignment_id
         required: true
         type: string
       - description: Page number
@@ -5774,14 +5783,14 @@ paths:
       summary: List assignment submissions
       tags:
       - Assignments
-  /courses/{course_id}/assignments/{id}/submissions/{submission_id}/grade:
+  /courses/{course_id}/assignments/{assignment_id}/submissions/{submission_id}/grade:
     post:
       consumes:
       - application/json
       parameters:
       - description: Assignment ID
         in: path
-        name: id
+        name: assignment_id
         required: true
         type: string
       - description: Submission ID
@@ -5807,14 +5816,14 @@ paths:
       summary: Grade an assignment submission
       tags:
       - Assignments
-  /courses/{course_id}/assignments/{id}/submit:
+  /courses/{course_id}/assignments/{assignment_id}/submit:
     post:
       consumes:
       - application/json
       parameters:
       - description: Assignment ID
         in: path
-        name: id
+        name: assignment_id
         required: true
         type: string
       - description: Submission data
@@ -5893,12 +5902,12 @@ paths:
       summary: Create a quiz
       tags:
       - Quizzes
-  /courses/{course_id}/quizzes/{id}:
+  /courses/{course_id}/quizzes/{quiz_id}:
     delete:
       parameters:
       - description: Quiz ID
         in: path
-        name: id
+        name: quiz_id
         required: true
         type: string
       responses:
@@ -5916,7 +5925,7 @@ paths:
       parameters:
       - description: Quiz ID
         in: path
-        name: id
+        name: quiz_id
         required: true
         type: string
       produces:
@@ -5937,7 +5946,7 @@ paths:
       parameters:
       - description: Quiz ID
         in: path
-        name: id
+        name: quiz_id
         required: true
         type: string
       - description: Quiz data
@@ -5958,12 +5967,12 @@ paths:
       summary: Update a quiz
       tags:
       - Quizzes
-  /courses/{course_id}/quizzes/{id}/publish:
+  /courses/{course_id}/quizzes/{quiz_id}/publish:
     post:
       parameters:
       - description: Quiz ID
         in: path
-        name: id
+        name: quiz_id
         required: true
         type: string
       responses:
@@ -5976,12 +5985,12 @@ paths:
       summary: Publish a quiz
       tags:
       - Quizzes
-  /courses/{course_id}/quizzes/{id}/start:
+  /courses/{course_id}/quizzes/{quiz_id}/start:
     post:
       parameters:
       - description: Quiz ID
         in: path
-        name: id
+        name: quiz_id
         required: true
         type: string
       responses:
@@ -5994,12 +6003,12 @@ paths:
       summary: Start a quiz attempt
       tags:
       - Quizzes
-  /courses/{course_id}/quizzes/{id}/submissions:
+  /courses/{course_id}/quizzes/{quiz_id}/submissions:
     get:
       parameters:
       - description: Quiz ID
         in: path
-        name: id
+        name: quiz_id
         required: true
         type: string
       - description: Page number
@@ -6023,14 +6032,14 @@ paths:
       summary: List quiz submissions
       tags:
       - Quizzes
-  /courses/{course_id}/quizzes/{id}/submissions/{submission_id}/grade:
+  /courses/{course_id}/quizzes/{quiz_id}/submissions/{submission_id}/grade:
     post:
       consumes:
       - application/json
       parameters:
       - description: Quiz ID
         in: path
-        name: id
+        name: quiz_id
         required: true
         type: string
       - description: Submission ID
@@ -6056,14 +6065,14 @@ paths:
       summary: Grade a quiz submission
       tags:
       - Quizzes
-  /courses/{course_id}/quizzes/{id}/submit:
+  /courses/{course_id}/quizzes/{quiz_id}/submit:
     post:
       consumes:
       - application/json
       parameters:
       - description: Quiz ID
         in: path
-        name: id
+        name: quiz_id
         required: true
         type: string
       - description: Answers
