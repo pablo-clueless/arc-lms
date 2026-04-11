@@ -321,27 +321,27 @@ func SetupRouter(cfg *RouterConfig) *RouterResult {
 				{
 					quizzes.GET("", assessmentHandler.ListQuizzes)
 					quizzes.POST("", assessmentHandler.CreateQuiz)
-					quizzes.GET("/:id", assessmentHandler.GetQuiz)
-					quizzes.PUT("/:id", assessmentHandler.UpdateQuiz)
-					quizzes.DELETE("/:id", assessmentHandler.DeleteQuiz)
-					quizzes.POST("/:id/publish", assessmentHandler.PublishQuiz)
-					quizzes.POST("/:id/start", assessmentHandler.StartQuiz)
-					quizzes.POST("/:id/submit", assessmentHandler.SubmitQuiz)
-					quizzes.GET("/:id/submissions", assessmentHandler.ListQuizSubmissions)
-					quizzes.POST("/:id/submissions/:submission_id/grade", assessmentHandler.GradeQuiz)
+					quizzes.GET("/:quiz_id", assessmentHandler.GetQuiz)
+					quizzes.PUT("/:quiz_id", assessmentHandler.UpdateQuiz)
+					quizzes.DELETE("/:quiz_id", assessmentHandler.DeleteQuiz)
+					quizzes.POST("/:quiz_id/publish", assessmentHandler.PublishQuiz)
+					quizzes.POST("/:quiz_id/start", assessmentHandler.StartQuiz)
+					quizzes.POST("/:quiz_id/submit", assessmentHandler.SubmitQuiz)
+					quizzes.GET("/:quiz_id/submissions", assessmentHandler.ListQuizSubmissions)
+					quizzes.POST("/:quiz_id/submissions/:submission_id/grade", assessmentHandler.GradeQuiz)
 				}
 
 				assignments := courses.Group("/:id/assignments")
 				{
 					assignments.GET("", assessmentHandler.ListAssignments)
 					assignments.POST("", assessmentHandler.CreateAssignment)
-					assignments.GET("/:id", assessmentHandler.GetAssignment)
-					assignments.PUT("/:id", assessmentHandler.UpdateAssignment)
-					assignments.DELETE("/:id", assessmentHandler.DeleteAssignment)
-					assignments.POST("/:id/publish", assessmentHandler.PublishAssignment)
-					assignments.POST("/:id/submit", assessmentHandler.SubmitAssignment)
-					assignments.GET("/:id/submissions", assessmentHandler.ListAssignmentSubmissions)
-					assignments.POST("/:id/submissions/:submission_id/grade", assessmentHandler.GradeAssignment)
+					assignments.GET("/:assignment_id", assessmentHandler.GetAssignment)
+					assignments.PUT("/:assignment_id", assessmentHandler.UpdateAssignment)
+					assignments.DELETE("/:assignment_id", assessmentHandler.DeleteAssignment)
+					assignments.POST("/:assignment_id/publish", assessmentHandler.PublishAssignment)
+					assignments.POST("/:assignment_id/submit", assessmentHandler.SubmitAssignment)
+					assignments.GET("/:assignment_id/submissions", assessmentHandler.ListAssignmentSubmissions)
+					assignments.POST("/:assignment_id/submissions/:submission_id/grade", assessmentHandler.GradeAssignment)
 				}
 			}
 

@@ -210,7 +210,18 @@ func (s *CommunicationService) processEmailSend(ctx context.Context, email *doma
 
 // GetEmail retrieves an email by ID
 func (s *CommunicationService) GetEmail(ctx context.Context, id uuid.UUID) (*domain.Email, error) {
-	return s.communicationRepo.Get(ctx, id)
+	email, err := s.communicationRepo.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Populate sender info
+	if err := s.populateSenderInfo(ctx, email); err != nil {
+		// Log error but don't fail - sender info is optional
+		fmt.Printf("failed to populate sender info: %v\n", err)
+	}
+
+	return email, nil
 }
 
 // ListEmails lists emails for a tenant
@@ -237,9 +248,68 @@ func (s *CommunicationService) ListEmails(
 		return nil, nil, fmt.Errorf("failed to list emails: %w", err)
 	}
 
+	// Populate sender info for all emails
+	s.populateSenderInfoBatch(ctx, emails)
+
 	pagination := repository.BuildPaginatedResult(total, params)
 
 	return emails, &pagination, nil
+}
+
+// populateSenderInfo populates the sender details for a single email
+func (s *CommunicationService) populateSenderInfo(ctx context.Context, email *domain.Email) error {
+	user, err := s.userRepo.GetByID(ctx, email.SenderID)
+	if err != nil {
+		return err
+	}
+
+	email.Sender = &domain.UserSummary{
+		ID:           user.ID,
+		FirstName:    user.FirstName,
+		LastName:     user.LastName,
+		Email:        user.Email,
+		ProfilePhoto: user.ProfilePhoto,
+		Role:         user.Role,
+	}
+
+	return nil
+}
+
+// populateSenderInfoBatch populates sender details for multiple emails efficiently
+func (s *CommunicationService) populateSenderInfoBatch(ctx context.Context, emails []*domain.Email) {
+	if len(emails) == 0 {
+		return
+	}
+
+	// Collect unique sender IDs
+	senderIDs := make(map[uuid.UUID]bool)
+	for _, email := range emails {
+		senderIDs[email.SenderID] = true
+	}
+
+	// Fetch all senders in one query
+	senderMap := make(map[uuid.UUID]*domain.UserSummary)
+	for senderID := range senderIDs {
+		user, err := s.userRepo.GetByID(ctx, senderID)
+		if err != nil {
+			continue
+		}
+		senderMap[senderID] = &domain.UserSummary{
+			ID:           user.ID,
+			FirstName:    user.FirstName,
+			LastName:     user.LastName,
+			Email:        user.Email,
+			ProfilePhoto: user.ProfilePhoto,
+			Role:         user.Role,
+		}
+	}
+
+	// Assign senders to emails
+	for _, email := range emails {
+		if sender, ok := senderMap[email.SenderID]; ok {
+			email.Sender = sender
+		}
+	}
 }
 
 // CancelEmail cancels a scheduled or draft email
@@ -519,6 +589,10 @@ func (s *CommunicationService) SearchEmails(
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// Populate sender info
+	s.populateSenderInfoBatch(ctx, emails)
+
 	pagination := repository.BuildPaginatedResult(total, params)
 	return emails, &pagination, nil
 }

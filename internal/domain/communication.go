@@ -52,11 +52,22 @@ type DeliveryRecipient struct {
 	ClickedAt    *time.Time              `json:"clicked_at,omitempty"`
 }
 
+// UserSummary represents a minimal user object for embedding in responses
+type UserSummary struct {
+	ID           uuid.UUID `json:"id"`
+	FirstName    string    `json:"first_name"`
+	LastName     string    `json:"last_name"`
+	Email        string    `json:"email"`
+	ProfilePhoto *string   `json:"profile_photo,omitempty"`
+	Role         Role      `json:"role"`
+}
+
 // Email represents an email communication
 type Email struct {
 	ID               uuid.UUID             `json:"id" validate:"required,uuid"`
 	TenantID         uuid.UUID             `json:"tenant_id" validate:"required,uuid"`
 	SenderID         uuid.UUID             `json:"sender_id" validate:"required,uuid"`
+	Sender           *UserSummary          `json:"sender,omitempty"`
 	Subject          string                `json:"subject" validate:"required,min=3,max=200"`
 	Body             string                `json:"body" validate:"required,min=10"`
 	HTMLBody         *string               `json:"html_body,omitempty"`

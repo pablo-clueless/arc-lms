@@ -35,6 +35,7 @@ func NewExaminationService(
 // CreateExaminationRequest represents a request to create an examination
 type CreateExaminationRequest struct {
 	CourseID     uuid.UUID                    `json:"course_id" validate:"required,uuid"`
+	ClassID      uuid.UUID                    `json:"class_id" validate:"required,uuid"`
 	TermID       uuid.UUID                    `json:"term_id" validate:"required,uuid"`
 	Title        string                       `json:"title" validate:"required,min=3,max=200"`
 	Instructions string                       `json:"instructions" validate:"required,min=10,max=3000"`
@@ -101,7 +102,7 @@ func (s *ExaminationService) CreateExamination(
 		ID:               uuid.New(),
 		TenantID:         tenantID,
 		CourseID:         req.CourseID,
-		ClassID:          course.ClassID,
+		ClassID:          req.ClassID,
 		TermID:           req.TermID,
 		CreatedByID:      actorID,
 		Title:            req.Title,
